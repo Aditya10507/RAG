@@ -1,12 +1,19 @@
-# Personal AI Assistant (Local RAG + Voice)
+---
+title: RAG AI Assistant
+emoji: 🧠
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
 
-## Overview
+# Personal AI Assistant (Local RAG + Voice)
 
 A fully local **AI-powered personal assistant** built using a Retrieval-Augmented Generation (RAG) pipeline. The system can understand documents, answer questions contextually, and interact through **voice input and output** — all without relying on paid APIs.
 
 ---
 
-##  Features
+## Features
 
 **Document Understanding**
   Extracts and processes PDFs using chunking and embeddings.
@@ -18,19 +25,21 @@ A fully local **AI-powered personal assistant** built using a Retrieval-Augmente
   Maintains chat history for multi-turn interactions.
 
 **Voice Assistant**
+  Speech-to-Text using Whisper
+  Text-to-Speech using pyttsx3
 
-  * Speech-to-Text using Whisper
-  * Text-to-Speech using pyttsx3
-
-  **Fully Local Setup**
+**Fully Local Setup**
   Runs entirely offline using Ollama + Mistral (no API cost).
+
+**Cloud-Ready**
+  Deploy to Hugging Face Spaces with Groq API — no local hardware needed.
 
 ---
 
-##Tech Stack
+## Tech Stack
 
 * **Language:** Python
-* **LLM:** Mistral (via Ollama)
+* **LLM:** Mistral (via Ollama) locally, or Mixtral 8x7B (via Groq API) on HF Spaces
 * **Embeddings:** Sentence Transformers
 * **Vector DB:** FAISS
 * **Speech-to-Text:** Whisper
@@ -38,22 +47,24 @@ A fully local **AI-powered personal assistant** built using a Retrieval-Augmente
 
 ---
 
-##Project Structure
+## Project Structure
 
 ```
 rag-assistant/
 │
-├── ingest.py        # PDF processing + embedding generation
-├── query.py         # RAG pipeline + response generation
-├── voice.py         # Voice input/output integration
-├── README.md
+├── app.py            # Flask web server
+├── query.py          # RAG pipeline + response generation
+├── ingest.py         # PDF processing + embedding generation
+├── voice.py          # Voice input/output integration
+├── Dockerfile        # HF Spaces container definition
 ├── requirements.txt
-└── .gitignore
+├── .gitattributes
+└── README.md
 ```
 
 ---
 
-##Setup Instructions
+## Setup Instructions
 
 ### 1. Clone the repository
 
@@ -84,12 +95,43 @@ ollama run mistral
 ### 5. Run the assistant
 
 ```
-python query.py
+python app.py
 ```
+
+Then open **http://localhost:7860** (or `5000` locally) in your browser.
 
 ---
 
-##Use Cases
+## Deploy to Hugging Face Spaces
+
+### One-click deploy
+
+1. Push this repo to GitHub
+2. Go to [huggingface.co/spaces](https://huggingface.co/spaces) → **Create new Space**
+3. Choose **Docker** as the SDK
+4. Connect your GitHub repo
+5. Add your **Groq API key** as a secret (`GROQ_API_KEY`)
+6. Upload a PDF via the Space's persistent storage or build the index after deploying
+
+The Dockerfile handles everything — no manual configuration needed.
+
+### Environment Variables
+
+| Variable        | Required | Description                                     |
+|-----------------|----------|-------------------------------------------------|
+| `GROQ_API_KEY`  | Yes      | Groq API key for cloud LLM (get at console.groq.com) |
+| `PORT`          | No       | Port to listen on (default: 7860 for HF Spaces) |
+
+### How it works on HF Spaces
+
+- **FAISS index** stays on the Space's persistent storage (survives restarts)
+- **sentence-transformers** runs locally inside the container
+- **Groq API** handles LLM inference (Mixtral 8x7B — 32K context, fast)
+- The web UI is served by Flask + gunicorn
+
+---
+
+## Use Cases
 
 * Personal knowledge assistant
 * Resume/document Q&A system
@@ -98,32 +140,24 @@ python query.py
 
 ---
 
-##Key Learnings
+## Key Learnings
 
 * Built a complete **RAG architecture from scratch**
 * Implemented **semantic search using FAISS**
 * Integrated **LLMs locally without APIs**
 * Developed **voice-enabled AI interactions**
+* Deployed to **Hugging Face Spaces with Docker**
 * Managed **clean Git workflows and project structure**
 
 ---
 
-##Future Improvements
-
-* Web interface (Streamlit / React)
-* Multi-document support
-* Real-time voice assistant
-* Deployment as a desktop app
-
----
-
-##Author
+## Author
 
 **Aditya Singh**
 Aspiring AI/ML Engineer focused on building real-world intelligent systems.
 
 ---
 
-##If you like this project
+## If you like this project
 
 Give it a ⭐ on GitHub and feel free to contribute!
