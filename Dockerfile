@@ -21,8 +21,11 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # Copy the rest of the application
 COPY --chown=user . .
 
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
+
 # Expose the port HF Spaces expects
 EXPOSE 7860
 
-# Run with gunicorn for production-grade serving
-CMD ["gunicorn", "--bind", "0.0.0.0:7860", "--workers", "2", "--timeout", "120", "app:app"]
+# Run entrypoint that auto-builds the index if needed, then starts the server
+CMD ["./entrypoint.sh"]
