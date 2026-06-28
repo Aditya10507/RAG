@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from pypdf import PdfReader
 import json
@@ -179,4 +180,7 @@ def ingest_pdf(data_dir: str = "data", db_dir: str = "db") -> None:
 
 
 if __name__ == "__main__":
-    ingest_pdf()
+    ingest_pdf(
+        data_dir=os.environ.get("DATA_DIR", "data"),
+        db_dir=os.environ.get("DB_DIR", "db"),
+    )

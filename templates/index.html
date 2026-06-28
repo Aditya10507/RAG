@@ -677,9 +677,9 @@
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
           Upload PDFs
         </button>
-        <button class="action-button" id="reindex-btn" title="Rebuild search index">
+        <button class="action-button" id="reindex-btn" title="Refresh document memory">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18 2v4h-4"/><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M6 22v-4h4"/></svg>
-          Rebuild index
+          Refresh memory
         </button>
       </div>
 
@@ -696,7 +696,7 @@
       <div class="system-panel">
         <div class="section-heading">System</div>
         <div class="status-grid">
-          <div class="status-pill"><span>Index</span><span class="status-value" id="index-status">Checking</span></div>
+          <div class="status-pill"><span>Docs</span><span class="status-value" id="index-status">Checking</span></div>
           <div class="status-pill"><span>Groq</span><span class="status-value" id="groq-status">Checking</span></div>
         </div>
       </div>
@@ -712,7 +712,7 @@
           <button class="icon-button" id="mobile-upload-btn" title="Upload PDF documents">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
           </button>
-          <button class="icon-button" id="mobile-reindex-btn" title="Rebuild search index">
+          <button class="icon-button" id="mobile-reindex-btn" title="Refresh document memory">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18 2v4h-4"/><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M6 22v-4h4"/></svg>
           </button>
           <button class="icon-button" id="clear-btn" title="New chat">
@@ -731,7 +731,7 @@
           <div class="welcome" id="welcome">
             <div class="welcome-inner">
               <h2>How can I help?</h2>
-              <p>Ask anything now. Upload PDFs and rebuild the index when you want answers grounded in your documents.</p>
+              <p>Ask anything now. Upload PDFs when you want answers grounded in your documents.</p>
               <div class="suggestions">
                 <button class="suggestion-chip" onclick="sendSuggestion(this)">Explain RAG in simple terms</button>
                 <button class="suggestion-chip" onclick="sendSuggestion(this)">Help me plan a document review</button>
@@ -927,7 +927,7 @@
       files.forEach((file) => formData.append('documents', file));
 
       setBusy(true);
-      showToast('Uploading PDF documents...', 'success');
+      showToast('Storing and reading PDF documents...', 'success');
 
       try {
         const response = await fetch('/api/upload', { method: 'POST', body: formData });
@@ -941,7 +941,8 @@
         const uploadedCount = data.uploaded ? data.uploaded.length : files.length;
         const rejectedCount = data.rejected ? data.rejected.length : 0;
         const suffix = rejectedCount ? ` ${rejectedCount} file(s) were skipped.` : '';
-        showToast(`${uploadedCount} PDF file(s) uploaded. Rebuild the index before chatting with them.${suffix}`, 'success');
+        const indexedText = data.chunks ? ` I stored ${data.chunks} searchable chunk(s).` : '';
+        showToast(`${uploadedCount} PDF file(s) stored and ready.${indexedText}${suffix}`, 'success');
         await refreshSystemState();
       } catch (error) {
         showToast('Upload failed. Is the server running?');
@@ -983,14 +984,14 @@
       const response = await fetch('/api/health');
       const data = await response.json();
 
-      indexStatus.textContent = data.index_ready ? 'Ready' : 'Missing';
+      indexStatus.textContent = data.index_ready ? 'Ready' : 'Chat only';
       indexStatus.style.color = data.index_ready ? 'var(--success)' : 'var(--warn)';
       groqStatus.textContent = data.groq_configured ? 'Ready' : 'Missing';
       groqStatus.style.color = data.groq_configured ? 'var(--success)' : 'var(--warn)';
       topStatus.textContent = data.index_ready
-        ? `${data.uploaded_documents} PDF(s) indexed.`
+        ? `${data.uploaded_documents} PDF(s) stored and searchable.`
         : data.uploaded_documents
-          ? `${data.uploaded_documents} PDF(s) uploaded. General chat ready; rebuild index for document answers.`
+          ? `${data.uploaded_documents} PDF(s) stored. Refresh memory if document answers seem out of date.`
           : 'General chat ready. Upload PDFs for document-grounded answers.';
 
       return data;
@@ -1007,21 +1008,21 @@
 
     async function rebuildIndex() {
       setBusy(true);
-      showToast('Rebuilding search index. This can take a minute...', 'success');
+      showToast('Refreshing document memory. This can take a minute...', 'success');
 
       try {
         const response = await fetch('/api/reindex', { method: 'POST' });
         const data = await response.json();
 
         if (!response.ok) {
-          showToast(data.error || 'Index rebuild failed.');
+          showToast(data.error || 'Document refresh failed.');
           return;
         }
 
-        showToast(`Index rebuilt from ${data.documents} PDF(s) with ${data.chunks} chunk(s).`, 'success');
+        showToast(`Document memory refreshed from ${data.documents} PDF(s) with ${data.chunks} chunk(s).`, 'success');
         await refreshSystemState();
       } catch (error) {
-        showToast('Index rebuild failed. Is the server running?');
+        showToast('Document refresh failed. Is the server running?');
       } finally {
         setBusy(false);
       }
@@ -1084,7 +1085,7 @@
         <div class="welcome" id="welcome">
           <div class="welcome-inner">
             <h2>How can I help?</h2>
-            <p>Ask anything now. Upload PDFs and rebuild the index when you want answers grounded in your documents.</p>
+            <p>Ask anything now. Upload PDFs and refresh memory when you want answers grounded in your documents.</p>
             <div class="suggestions">
               <button class="suggestion-chip" onclick="sendSuggestion(this)">Explain RAG in simple terms</button>
               <button class="suggestion-chip" onclick="sendSuggestion(this)">Help me plan a document review</button>
@@ -1097,13 +1098,36 @@
       messageInput.focus();
     }
 
+    async function loadChatHistory() {
+      try {
+        const response = await fetch('/api/history');
+        const data = await response.json();
+        const history = data.history || [];
+        if (!history.length) return;
+
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.remove();
+
+        history.forEach((turn) => {
+          if (!turn.user || !turn.assistant) return;
+          chatMessages.appendChild(createMessageElement('user', turn.user));
+          chatMessages.appendChild(createMessageElement('assistant', turn.assistant));
+          messageHistory.push({ role: 'user', content: turn.user });
+          messageHistory.push({ role: 'assistant', content: turn.assistant });
+        });
+        scrollToBottom();
+      } catch (error) {
+        /* stored history is optional */
+      }
+    }
+
     async function checkHealth() {
       try {
         const data = await refreshHealth();
         if (data.index_ready && data.groq_configured) {
-          showToast(`System healthy. ${data.uploaded_documents} PDF(s) uploaded and Groq is configured.`, 'success');
+          showToast(`System healthy. ${data.uploaded_documents} PDF(s) stored and Groq is configured.`, 'success');
         } else if (!data.index_ready) {
-          showToast(`Index is not ready. Rebuild it after uploading PDFs.`);
+          showToast('General chat is ready. Upload PDFs to enable document answers.');
         } else {
           showToast('GROQ_API_KEY is missing. Add it to your environment or .env file.');
         }
@@ -1112,6 +1136,7 @@
       }
     }
 
+    loadChatHistory();
     refreshSystemState();
     messageInput.focus();
   </script>

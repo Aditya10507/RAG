@@ -1,18 +1,23 @@
 #!/bin/bash
 set -e
 
-# Ensure data/ directory exists (HF Spaces removes it since it's in .gitignore)
-mkdir -p data
+APP_STORAGE_DIR="${APP_STORAGE_DIR:-.}"
+DATA_DIR="${DATA_DIR:-${APP_STORAGE_DIR}/data}"
+DB_DIR="${DB_DIR:-${APP_STORAGE_DIR}/db}"
+export APP_STORAGE_DIR DATA_DIR DB_DIR
 
-# If there's a PDF in /data and no index yet, build the index
-if [ -n "$(find data -maxdepth 1 -name '*.pdf' -print -quit)" ] && [ ! -f "db/index.faiss" ]; then
-    echo "PDF found in data/ - building FAISS index..."
+# Ensure storage directories exist.
+mkdir -p "$DATA_DIR" "$DB_DIR"
+
+# If there are stored PDFs and no document memory yet, build it at startup.
+if [ -n "$(find "$DATA_DIR" -maxdepth 1 -name '*.pdf' -print -quit)" ] && [ ! -f "$DB_DIR/index.faiss" ]; then
+    echo "PDF found in $DATA_DIR - building document memory..."
     python ingest.py
-    echo "Index built successfully"
-elif [ ! -f "db/index.faiss" ]; then
-    echo "No index found. Upload a PDF to the 'data' folder through the HF Files tab, then restart the Space."
+    echo "Document memory built successfully"
+elif [ ! -f "$DB_DIR/index.faiss" ]; then
+    echo "No document memory found yet. General chat will work; upload PDFs in the app for document answers."
 fi
 
 # Start the web server
 echo "Starting AI Assistant..."
-exec gunicorn --bind 0.0.0.0:7860 --workers 2 --timeout 120 app:app
+exec gunicorn --bind 0.0.0.0:7860 --workers 1 --timeout 120 app:app

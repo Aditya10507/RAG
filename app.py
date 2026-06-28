@@ -37,8 +37,68 @@ from query import get_response, chat_history, reset_rag_cache
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
 
-DATA_DIR = Path("data")
+STORAGE_DIR = Path(os.environ.get("APP_STORAGE_DIR", ".")).expanduser()
+DATA_DIR = Path(os.environ.get("DATA_DIR", str(STORAGE_DIR / "data"))).expanduser()
+DB_DIR = Path(os.environ.get("DB_DIR", str(STORAGE_DIR / "db"))).expanduser()
+CHAT_HISTORY_FILE = Path(
+    os.environ.get("CHAT_HISTORY_FILE", str(STORAGE_DIR / "chat_history.json"))
+).expanduser()
 ALLOWED_EXTENSIONS = {"pdf"}
+
+
+def _ensure_storage_dirs() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    CHAT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _load_chat_history() -> None:
+    """Load saved chat turns from disk for a simple persistent chat experience."""
+    if not CHAT_HISTORY_FILE.exists():
+        return
+
+    try:
+        with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return
+
+    if isinstance(saved, list):
+        chat_history.clear()
+        chat_history.extend(
+            item for item in saved
+            if isinstance(item, dict) and "user" in item and "assistant" in item
+        )
+
+
+def _save_chat_history() -> None:
+    _ensure_storage_dirs()
+    with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(chat_history, f, ensure_ascii=False)
+
+
+def _chunk_count() -> int:
+    chunks_file = DB_DIR / "chunks.json"
+    if not chunks_file.exists():
+        return 0
+
+    with open(chunks_file, "r", encoding="utf-8") as f:
+        return len(json.load(f))
+
+
+def _rebuild_document_index() -> dict:
+    """Rebuild stored document search data and return index stats."""
+    ingest_pdf(data_dir=str(DATA_DIR), db_dir=str(DB_DIR))
+    reset_rag_cache()
+    pdf_count = len(list(DATA_DIR.glob("*.pdf")))
+    return {
+        "documents": pdf_count,
+        "chunks": _chunk_count(),
+    }
+
+
+_ensure_storage_dirs()
+_load_chat_history()
 
 
 def _is_allowed_pdf(filename: str) -> bool:
@@ -91,7 +151,8 @@ def api_chat():
         return jsonify({"error": "Empty message"}), 400
 
     try:
-        reply = get_response(user_msg)
+        reply = get_response(user_msg, db_dir=str(DB_DIR))
+        _save_chat_history()
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:
@@ -110,12 +171,13 @@ def api_history():
 def api_clear():
     """Clear the conversation history."""
     chat_history.clear()
+    _save_chat_history()
     return jsonify({"status": "cleared"})
 
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """Upload one or more PDF documents into the data directory."""
+    """Upload one or more PDF documents, store them, and index them immediately."""
     files = request.files.getlist("documents")
     if not files:
         return jsonify({"error": "No PDF files were uploaded."}), 400
@@ -143,11 +205,26 @@ def api_upload():
     if not uploaded:
         return jsonify({"error": "No valid PDF files were uploaded.", "rejected": rejected}), 400
 
+    try:
+        stats = _rebuild_document_index()
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e), "uploaded": uploaded, "rejected": rejected}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e), "uploaded": uploaded, "rejected": rejected}), 400
+    except Exception as e:
+        return jsonify({
+            "error": f"Upload saved, but indexing failed: {e}",
+            "uploaded": uploaded,
+            "rejected": rejected,
+        }), 500
+
     return jsonify({
-        "status": "uploaded",
+        "status": "stored_and_indexed",
         "uploaded": uploaded,
         "rejected": rejected,
-        "message": "Upload complete. Rebuild the index before asking questions about new files.",
+        "documents": stats["documents"],
+        "chunks": stats["chunks"],
+        "message": f"Stored and indexed {stats['documents']} PDF(s). You can ask about them now.",
     })
 
 
@@ -167,23 +244,14 @@ def api_documents():
 
 @app.route("/api/reindex", methods=["POST"])
 def api_reindex():
-    """Rebuild the FAISS index from uploaded PDF documents."""
+    """Refresh searchable document memory from uploaded PDF documents."""
     try:
-        ingest_pdf(data_dir=str(DATA_DIR), db_dir="db")
-        reset_rag_cache()
-
-        chunks_file = Path("db") / "chunks.json"
-        chunk_count = 0
-        if chunks_file.exists():
-            with open(chunks_file, "r", encoding="utf-8") as f:
-                chunk_count = len(json.load(f))
-
-        pdf_count = len(list(DATA_DIR.glob("*.pdf")))
+        stats = _rebuild_document_index()
         return jsonify({
             "status": "reindexed",
-            "documents": pdf_count,
-            "chunks": chunk_count,
-            "message": f"Index rebuilt from {pdf_count} PDF(s) with {chunk_count} chunk(s).",
+            "documents": stats["documents"],
+            "chunks": stats["chunks"],
+            "message": f"Document memory refreshed from {stats['documents']} PDF(s) with {stats['chunks']} chunk(s).",
         })
     except FileNotFoundError as e:
         return jsonify({"error": str(e)}), 400
@@ -196,15 +264,16 @@ def api_reindex():
 @app.route("/api/health", methods=["GET"])
 def api_health():
     """Health check endpoint."""
-    db_path = Path("db")
-    index_exists = (db_path / "index.faiss").exists()
-    chunks_exists = (db_path / "chunks.json").exists()
+    index_exists = (DB_DIR / "index.faiss").exists()
+    chunks_exists = (DB_DIR / "chunks.json").exists()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     pdf_count = len(list(DATA_DIR.glob("*.pdf")))
     return jsonify({
         "status": "ok",
         "index_ready": index_exists and chunks_exists,
         "uploaded_documents": pdf_count,
+        "stored_messages": len(chat_history),
+        "storage_dir": str(STORAGE_DIR),
         "groq_configured": bool(os.environ.get("GROQ_API_KEY", "").strip()),
         "groq_model": os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b"),
     })
