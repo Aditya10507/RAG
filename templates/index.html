@@ -706,7 +706,7 @@
       <header class="topbar">
         <div class="conversation-title">
           <h1>AI Assistant</h1>
-          <p id="top-status">Ask questions grounded in your indexed PDFs.</p>
+          <p id="top-status">Chat normally, or upload PDFs for document-grounded answers.</p>
         </div>
         <div class="topbar-actions">
           <button class="icon-button" id="mobile-upload-btn" title="Upload PDF documents">
@@ -730,13 +730,13 @@
         <div class="chat-messages" id="chat-messages">
           <div class="welcome" id="welcome">
             <div class="welcome-inner">
-              <h2>What should we look up?</h2>
-              <p>Ask a focused question and I will answer from the documents in your index.</p>
+              <h2>How can I help?</h2>
+              <p>Ask anything now. Upload PDFs and rebuild the index when you want answers grounded in your documents.</p>
               <div class="suggestions">
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">Summarize the indexed documents</button>
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">What are the key obligations?</button>
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">Find dates, names, and important terms</button>
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">What should I pay attention to?</button>
+                <button class="suggestion-chip" onclick="sendSuggestion(this)">Explain RAG in simple terms</button>
+                <button class="suggestion-chip" onclick="sendSuggestion(this)">Help me plan a document review</button>
+                <button class="suggestion-chip" onclick="sendSuggestion(this)">Draft a concise email</button>
+                <button class="suggestion-chip" onclick="sendSuggestion(this)">What can you help me with?</button>
               </div>
             </div>
           </div>
@@ -989,7 +989,9 @@
       groqStatus.style.color = data.groq_configured ? 'var(--success)' : 'var(--warn)';
       topStatus.textContent = data.index_ready
         ? `${data.uploaded_documents} PDF(s) indexed.`
-        : `${data.uploaded_documents} PDF(s) uploaded. Index rebuild needed.`;
+        : data.uploaded_documents
+          ? `${data.uploaded_documents} PDF(s) uploaded. General chat ready; rebuild index for document answers.`
+          : 'General chat ready. Upload PDFs for document-grounded answers.';
 
       return data;
     }
@@ -1081,13 +1083,13 @@
       chatMessages.innerHTML = `
         <div class="welcome" id="welcome">
           <div class="welcome-inner">
-            <h2>What should we look up?</h2>
-            <p>Ask a focused question and I will answer from the documents in your index.</p>
+            <h2>How can I help?</h2>
+            <p>Ask anything now. Upload PDFs and rebuild the index when you want answers grounded in your documents.</p>
             <div class="suggestions">
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">Summarize the indexed documents</button>
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">What are the key obligations?</button>
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">Find dates, names, and important terms</button>
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">What should I pay attention to?</button>
+              <button class="suggestion-chip" onclick="sendSuggestion(this)">Explain RAG in simple terms</button>
+              <button class="suggestion-chip" onclick="sendSuggestion(this)">Help me plan a document review</button>
+              <button class="suggestion-chip" onclick="sendSuggestion(this)">Draft a concise email</button>
+              <button class="suggestion-chip" onclick="sendSuggestion(this)">What can you help me with?</button>
             </div>
           </div>
         </div>

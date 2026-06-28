@@ -157,18 +157,24 @@ def _rerank(query: str, indices: list[int]) -> list[int]:
     return [idx for idx, _score in scored]
 
 
-def _build_prompt(user_query: str, context: str) -> str:
-    """Build the full prompt with system instruction, history, and context."""
-    last_n = 3
+def _format_recent_history(last_n: int = 3) -> str:
+    """Format recent chat turns for prompt context."""
     recent = chat_history[-last_n:]
-    history_text = ""
-    if recent:
-        history_lines = []
-        for item in recent:
-            history_lines.append(f"User: {item['user']}")
-            history_lines.append(f"Assistant: {item['assistant']}")
-            history_lines.append("")
-        history_text = "\n".join(history_lines)
+    if not recent:
+        return ""
+
+    history_lines = []
+    for item in recent:
+        history_lines.append(f"User: {item['user']}")
+        history_lines.append(f"Assistant: {item['assistant']}")
+        history_lines.append("")
+    return "\n".join(history_lines)
+
+
+def _build_prompt(user_query: str, context: str) -> str:
+    """Build the RAG prompt with system instruction, history, and context."""
+    last_n = 3
+    history_text = _format_recent_history(last_n)
 
     system_instruction = (
         "You are a helpful personal AI assistant. Answer clearly and based only on the provided context. "
@@ -183,6 +189,27 @@ def _build_prompt(user_query: str, context: str) -> str:
     prompt += (
         "Context (use this information as the only source):\n"
         f"{context}\n\n"
+        f"User question: {user_query}\n\n"
+        "Assistant (answer conversationally and concisely):"
+    )
+    return prompt
+
+
+def _build_general_prompt(user_query: str) -> str:
+    """Build a general chat prompt used before any document index exists."""
+    history_text = _format_recent_history()
+    system_instruction = (
+        "You are a helpful personal AI assistant. Answer naturally and clearly. "
+        "No searchable PDF index is available for this exchange, so do not claim to have read "
+        "uploaded or indexed documents. If the user asks about document contents, explain that "
+        "they need to upload PDFs and rebuild the index for document-grounded answers."
+    )
+
+    prompt = system_instruction + "\n\n"
+    if history_text:
+        prompt += f"Conversation history:\n{history_text}\n"
+
+    prompt += (
         f"User question: {user_query}\n\n"
         "Assistant (answer conversationally and concisely):"
     )
@@ -240,7 +267,14 @@ def get_response(user_query: str, db_dir: str = "db", k: int = 5) -> str:
     Returns the assistant's answer as a string and appends the interaction
     to the in-memory `chat_history`.
     """
-    _ensure_loaded(db_dir)
+    try:
+        _ensure_loaded(db_dir)
+    except FileNotFoundError:
+        prompt = _build_general_prompt(user_query)
+        answer = _generate_with_groq(prompt)
+        final_answer = str(answer) if answer is not None else "I'm sorry, I couldn't generate a response."
+        chat_history.append({"user": user_query, "assistant": final_answer})
+        return final_answer
 
     chunks = _GLOBAL["chunks"]
 

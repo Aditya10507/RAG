@@ -92,10 +92,6 @@ def api_chat():
 
     try:
         reply = get_response(user_msg)
-    except FileNotFoundError:
-        return jsonify({
-            "error": "FAISS index not found. Upload PDFs, then use the rebuild index button before chatting."
-        }), 500
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:

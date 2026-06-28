@@ -24,6 +24,7 @@ search, and generates answers through the Groq API.
 - Conversational memory for recent turns.
 - Source tracking when the index contains file/page metadata.
 - Groq API generation with configurable model via `GROQ_MODEL`.
+- General chat fallback before any PDFs are uploaded or indexed.
 
 ## Tech Stack
 
@@ -162,5 +163,8 @@ with Gunicorn.
 - The LLM depends on Groq API for answer generation.
 - Retrieval still uses local FAISS, BM25, sentence-transformer embeddings, and
   cross-encoder re-ranking.
+- If no FAISS index exists yet, the app still works as a general Groq-powered
+  assistant. Upload PDFs and rebuild the index to enable document-grounded
+  answers with source citations.
 - If you regenerate `db/chunks.json` with the current `ingest.py`, answers can
   include source file and page citations.
