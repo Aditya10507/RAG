@@ -1,6 +1,6 @@
 ---
 title: RAG AI Assistant
-emoji: brain
+emoji: 🧠
 colorFrom: indigo
 colorTo: purple
 sdk: docker
