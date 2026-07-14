@@ -1,12 +1,29 @@
 from pathlib import Path
 import json
 import os
+import re
 
 import faiss
 import numpy as np
-import requests
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv()
+else:
+    env_path = Path(".env")
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 # In-memory conversation history. Each item is a dict: {"user": str, "assistant": str}
 # This is kept in memory only (no persistence) and will be included in prompts
@@ -29,6 +46,19 @@ _RRF_K = 60
 _DENSE_TOP_K = 20
 _SPARSE_TOP_K = 20
 _RRF_TOP_K = 15
+_DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
+
+
+def _clean_model_answer(answer: str) -> str:
+    """Remove reasoning tags if a model returns them despite hidden reasoning settings."""
+    return re.sub(r"<think>.*?</think>", "", answer, flags=re.DOTALL).strip()
+
+
+def reset_rag_cache() -> None:
+    """Clear loaded index/retriever resources so the next query reloads rebuilt files."""
+    _GLOBAL["index"] = None
+    _GLOBAL["chunks"] = None
+    _GLOBAL["bm25"] = None
 
 
 def _tokenize(text: str) -> list[str]:
@@ -127,18 +157,24 @@ def _rerank(query: str, indices: list[int]) -> list[int]:
     return [idx for idx, _score in scored]
 
 
-def _build_prompt(user_query: str, context: str) -> str:
-    """Build the full prompt with system instruction, history, and context."""
-    last_n = 3
+def _format_recent_history(last_n: int = 3) -> str:
+    """Format recent chat turns for prompt context."""
     recent = chat_history[-last_n:]
-    history_text = ""
-    if recent:
-        history_lines = []
-        for item in recent:
-            history_lines.append(f"User: {item['user']}")
-            history_lines.append(f"Assistant: {item['assistant']}")
-            history_lines.append("")
-        history_text = "\n".join(history_lines)
+    if not recent:
+        return ""
+
+    history_lines = []
+    for item in recent:
+        history_lines.append(f"User: {item['user']}")
+        history_lines.append(f"Assistant: {item['assistant']}")
+        history_lines.append("")
+    return "\n".join(history_lines)
+
+
+def _build_prompt(user_query: str, context: str) -> str:
+    """Build the RAG prompt with system instruction, history, and context."""
+    last_n = 3
+    history_text = _format_recent_history(last_n)
 
     system_instruction = (
         "You are a helpful personal AI assistant. Answer clearly and based only on the provided context. "
@@ -159,40 +195,64 @@ def _build_prompt(user_query: str, context: str) -> str:
     return prompt
 
 
-def _generate_with_groq(prompt: str) -> str:
-    """Generate a response using the Groq API (cloud LLM)."""
-    from groq import Groq
-    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    completion = client.chat.completions.create(
-        model="mixtral-8x7b-32768",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1024,
-        temperature=0.7,
+def _build_general_prompt(user_query: str) -> str:
+    """Build a general chat prompt used before any document index exists."""
+    history_text = _format_recent_history()
+    system_instruction = (
+        "You are a helpful personal AI assistant. Answer naturally and clearly. "
+        "No searchable PDF index is available for this exchange, so do not claim to have read "
+        "uploaded or indexed documents. If the user asks about document contents, explain that "
+        "they need to upload PDFs and rebuild the index for document-grounded answers."
     )
-    return completion.choices[0].message.content
+
+    prompt = system_instruction + "\n\n"
+    if history_text:
+        prompt += f"Conversation history:\n{history_text}\n"
+
+    prompt += (
+        f"User question: {user_query}\n\n"
+        "Assistant (answer conversationally and concisely):"
+    )
+    return prompt
 
 
-def _generate_with_ollama(prompt: str) -> str:
-    """Generate a response using local Ollama via its HTTP API.
-
-    The Ollama model can be configured via the OLLAMA_MODEL environment variable.
-    Defaults to 'mistral'.
-    """
-    model = os.environ.get("OLLAMA_MODEL", "mistral")
-    try:
-        resp = requests.post(
-            "http://localhost:11434/api/generate",
-            json={"model": model, "prompt": prompt, "stream": False},
-            timeout=120,
-        )
-        resp.raise_for_status()
-        return resp.json()["response"].strip()
-    except requests.exceptions.ConnectionError:
+def _generate_with_groq(prompt: str) -> str:
+    """Generate a response using the Groq API."""
+    api_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not api_key:
         raise RuntimeError(
-            f"Cannot connect to Ollama at http://localhost:11434. "
-            f"Make sure Ollama is running and '{model}' model is pulled. "
-            "Alternatively, set the GROQ_API_KEY environment variable to use the Groq cloud API."
+            "GROQ_API_KEY is not set. Add it to your environment or .env file "
+            "before starting the assistant."
         )
+
+    model = os.environ.get("GROQ_MODEL", _DEFAULT_GROQ_MODEL).strip() or _DEFAULT_GROQ_MODEL
+
+    from groq import Groq
+
+    client = Groq(api_key=api_key)
+    request_kwargs = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1024,
+        "temperature": 0.7,
+    }
+    if model.startswith("qwen/"):
+        request_kwargs["reasoning_format"] = "hidden"
+        request_kwargs["reasoning_effort"] = "none"
+
+    try:
+        completion = client.chat.completions.create(
+            **request_kwargs
+        )
+    except Exception as e:
+        error_text = str(e)
+        if "blocked at the project level" in error_text or "model_permission_blocked_project" in error_text:
+            raise RuntimeError(
+                f"Groq model '{model}' is blocked for this project. "
+                "Change GROQ_MODEL in .env to an enabled model, or enable the model in Groq project settings."
+            ) from e
+        raise
+    return _clean_model_answer(completion.choices[0].message.content)
 
 
 def get_response(user_query: str, db_dir: str = "db", k: int = 5) -> str:
@@ -202,12 +262,19 @@ def get_response(user_query: str, db_dir: str = "db", k: int = 5) -> str:
     1. Hybrid retrieval (FAISS dense + BM25 sparse) with RRF fusion
     2. Cross-encoder re-ranking of top results
     3. Context assembly with source metadata
-    4. LLM generation via Ollama (local) or Groq (cloud)
+    4. LLM generation via the Groq API
 
     Returns the assistant's answer as a string and appends the interaction
     to the in-memory `chat_history`.
     """
-    _ensure_loaded(db_dir)
+    try:
+        _ensure_loaded(db_dir)
+    except FileNotFoundError:
+        prompt = _build_general_prompt(user_query)
+        answer = _generate_with_groq(prompt)
+        final_answer = str(answer) if answer is not None else "I'm sorry, I couldn't generate a response."
+        chat_history.append({"user": user_query, "assistant": final_answer})
+        return final_answer
 
     chunks = _GLOBAL["chunks"]
 
@@ -245,10 +312,7 @@ def get_response(user_query: str, db_dir: str = "db", k: int = 5) -> str:
     # Step 5: Build prompt and generate
     prompt = _build_prompt(user_query, context)
 
-    if os.environ.get("GROQ_API_KEY"):
-        answer = _generate_with_groq(prompt)
-    else:
-        answer = _generate_with_ollama(prompt)
+    answer = _generate_with_groq(prompt)
 
     final_answer = str(answer) if answer is not None else "I'm sorry, I couldn't generate a response."
 

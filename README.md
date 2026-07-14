@@ -1,4 +1,4 @@
-Live link _ _ _   '''https://adi080122-local-rag-voice-ai-assistant.hf.space/'''
+---
 title: RAG AI Assistant
 colorFrom: indigo
 colorTo: purple
@@ -6,183 +6,136 @@ sdk: docker
 app_port: 7860
 ---
 
-# Personal AI Assistant (Local RAG + Voice)
+# Personal AI Assistant (RAG + Groq API)
 
-A fully local **AI-powered personal assistant** built using a production-grade Retrieval-Augmented Generation (RAG) pipeline. The system can understand documents, answer questions contextually, and interact through **voice input and output** — all without relying on paid APIs.
+[Live application](https://adi080122-local-rag-voice-ai-assistant.hf.space/)
 
----
+An AI-powered personal assistant built with a Retrieval-Augmented Generation
+(RAG) pipeline. It reads your PDFs, retrieves relevant context with hybrid
+search, and generates answers through the Groq API.
 
 ## Features
 
-**📄 Document Understanding**
-  Extracts and processes PDFs using semantic-aware recursive chunking (paragraph → sentence → word boundaries).
-
-**🔀 Hybrid RAG Pipeline**
-  Combines **dense (FAISS)** + **sparse (BM25)** retrieval with **Reciprocal Rank Fusion (RRF)** for significantly better document retrieval than pure semantic search alone.
-
-**⚡ Cross-Encoder Re-Ranking**
-  A lightweight cross-encoder model re-ranks the top retrieved results, ensuring the most relevant context reaches the LLM.
-
-**💬 Conversational Memory**
-  Maintains chat history for multi-turn interactions.
-
-**📎 Source Tracking**
-  Each response includes the document and page number the answer was derived from.
-
-**🎤 Voice Assistant**
-  Speech-to-Text using Whisper
-  Text-to-Speech using pyttsx3
-
-**🔧 Configurable LLM**
-  Choose any Ollama model via the `OLLAMA_MODEL` environment variable (e.g., `llama3`, `gemma2`, `qwen2.5`, `mistral`).
-
-**💯 Fully Local & Free**
-  Runs entirely offline using Ollama (no API costs). All models — embeddings, cross-encoder, and LLM — run locally.
-
-**☁️ Cloud-Ready**
-  Deploy to Hugging Face Spaces with Groq API — no local hardware needed.
-
----
+- Document understanding from PDFs with recursive semantic chunking.
+- Message-bound PDF attachments from the chat composer into app storage.
+- Automatic document indexing after PDF upload.
+- Hybrid retrieval with dense FAISS search plus sparse BM25 search.
+- Reciprocal Rank Fusion (RRF) to combine dense and keyword rankings.
+- Cross-encoder re-ranking before context is sent to the LLM.
+- Stored chat history, including the PDFs associated with each chat turn.
+- Source tracking when the index contains file/page metadata.
+- Groq API generation with configurable model via `GROQ_MODEL`.
+- General chat fallback before any PDFs are uploaded or indexed.
+- Configurable storage paths for PDFs, document memory, and chat history.
 
 ## Tech Stack
 
-| Component  | Technology |
+| Component | Technology |
 |---|---|
-| **Language** | Python |
-| **LLM (local)** | Mistral / Llama 3 / Gemma 2 / Qwen 2.5 (via Ollama, configurable via `OLLAMA_MODEL`) |
-| **LLM (cloud)** | Mixtral 8x7B (via Groq API, free tier available) |
-| **Embeddings** | Sentence Transformers (`all-MiniLM-L6-v2`) |
-| **Sparse Retrieval** | BM25 (`rank-bm25`) |
-| **Dense Retrieval** | FAISS |
-| **Re-Ranking** | Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) |
-| **Fusion Strategy** | Reciprocal Rank Fusion (RRF) |
-| **Speech-to-Text** | Whisper |
-| **Text-to-Speech** | pyttsx3 |
-| **Web Framework** | Flask + Gunicorn |
+| Language | Python |
+| LLM | Groq API, default `qwen/qwen3.6-27b` |
+| Embeddings | Sentence Transformers (`all-MiniLM-L6-v2`) |
+| Sparse Retrieval | BM25 (`rank-bm25`) |
+| Dense Retrieval | FAISS |
+| Re-Ranking | Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) |
+| Fusion Strategy | Reciprocal Rank Fusion (RRF) |
+| Web Framework | Flask + Gunicorn |
 
----
+## RAG Pipeline
 
-## RAG Pipeline Architecture
-
-```
+```text
 User Query
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  1. Hybrid Retrieval                │
-│  ├── Dense: FAISS (semantic) ────┐  │
-│  └── Sparse: BM25 (keyword)  ────┤  │
-│      └── RRF Fusion ─────────────┘  │
-│      → Top 15 results               │
-└─────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  2. Cross-Encoder Re-Ranking        │
-│  → Scores each (query, chunk) pair  │
-│  → Top 5 most relevant chunks       │
-└─────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  3. Context Assembly                │
-│  → Annotates chunks with source     │
-│    metadata (file, page)            │
-│  → Builds prompt with history       │
-└─────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  4. LLM Generation                  │
-│  ├── Ollama (local) — default       │
-│  └── Groq API — if key is set       │
-└─────────────────────────────────────┘
-    │
-    ▼
-  Answer + Source Citations
+  -> Hybrid Retrieval
+     -> Dense FAISS semantic search
+     -> Sparse BM25 keyword search
+     -> RRF fusion
+  -> Cross-Encoder Re-Ranking
+  -> Context Assembly with source metadata
+  -> Groq API Generation
+  -> Answer + source citations
 ```
-
-### Why this design?
-
-- **Hybrid search (FAISS + BM25)** catches both semantic meaning AND exact keyword matches — much better than either alone
-- **RRF fusion** combines rankings without needing to normalize scores across different retrieval methods
-- **Cross-encoder re-ranking** is more accurate than bi-encoder (sentence-transformer) similarity, fixing the "good enough for search but not for final answer" problem
-- **Recursive chunking** respects natural text boundaries (paragraphs → sentences), avoiding broken context
-- **Source citations** give transparency about where answers come from
-
----
 
 ## Project Structure
 
-```
+```text
 rag-assistant/
-│
-├── app.py            # Flask web server
-├── query.py          # RAG pipeline (hybrid search, re-ranking, generation)
-├── ingest.py         # PDF processing + recursive chunking + embedding
-├── voice.py          # Voice input/output integration
-├── Dockerfile        # HF Spaces container definition
-├── requirements.txt
-├── .gitattributes
-└── README.md
+|-- app.py              # Flask web server
+|-- query.py            # RAG pipeline and Groq generation
+|-- ingest.py           # PDF processing, chunking, embeddings, FAISS index
+|-- templates/
+|   `-- index.html      # Chat UI
+|-- Dockerfile          # Hugging Face Spaces container definition
+|-- entrypoint.sh       # Container startup script
+|-- requirements.txt
+|-- .env.example
+`-- README.md
 ```
 
----
+## Setup
 
-## Setup Instructions
-
-### 1. Clone the repository
+### 1. Create a virtual environment
 
 ```bash
-git clone https://github.com/Aditya10507/Local-RAG-based-Voice-AI-Assistant.git
-cd rag-assistant
-```
-
-### 2. Create virtual environment
-
-```bash
-# Windows
 python -m venv venv
-venv\Scripts\activate
+```
 
-# macOS/Linux
-python3 -m venv venv
+Windows:
+
+```bash
+venv\Scripts\activate
+```
+
+macOS/Linux:
+
+```bash
 source venv/bin/activate
 ```
 
-### 3. Install dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Ingest your documents
+### 3. Configure Groq
 
-Place PDF files in the `data/` directory, then run:
+Create a `.env` file from `.env.example` and add your Groq API key:
+
+```bash
+GROQ_API_KEY=your-groq-api-key
+GROQ_MODEL=qwen/qwen3.6-27b
+PORT=7860
+```
+
+You can get a Groq API key from the Groq Console.
+
+### 4. Chat and add documents
+
+You can chat immediately, even before uploading PDFs.
+
+You can add PDFs in either of these ways:
+
+- Start the app and attach PDFs from the message composer. Selected files are
+  shown on the outgoing message, indexed, and then used to answer that message.
+- Manually create a `data/` directory and place PDF files inside it.
+
+Uploaded files are saved to app storage and indexed automatically. Once upload
+finishes, you can ask questions about those documents in the same chat.
+
+### 5. Refresh document memory
+
+Manual refresh is normally not needed after UI uploads, because the app indexes
+PDFs automatically. Use the refresh memory button only after manually changing
+files in the storage folder.
+
+You can also run the same ingestion process manually:
 
 ```bash
 python ingest.py
 ```
 
-This chunks your PDFs recursively at semantic boundaries, generates embeddings, and builds the FAISS + BM25 indexes.
-
-### 5. Start Ollama
-
-```bash
-ollama run mistral
-```
-
-Or use a different model:
-
-```bash
-# On Windows (PowerShell):
-$env:OLLAMA_MODEL="llama3"
-ollama run llama3
-
-# On macOS/Linux:
-export OLLAMA_MODEL=llama3
-ollama run llama3
-```
+This chunks your PDFs, generates embeddings, and builds the FAISS index in the
+configured `DB_DIR`.
 
 ### 6. Run the assistant
 
@@ -190,72 +143,42 @@ ollama run llama3
 python app.py
 ```
 
-Then open **http://localhost:7860** in your browser.
-
----
+Then open `http://localhost:7860` in your browser.
 
 ## Environment Variables
 
-| Variable          | Required | Default   | Description                                     |
-|-------------------|----------|-----------|-------------------------------------------------|
-| `GROQ_API_KEY`    | No*      | —         | Groq API key for cloud LLM (get at console.groq.com) |
-| `OLLAMA_MODEL`    | No       | `mistral` | Ollama model name (e.g., `llama3`, `gemma2`, `qwen2.5`) |
-| `PORT`            | No       | `7860`    | Port to listen on                               |
-
-*\*One of `GROQ_API_KEY` or local Ollama is required.*
-
----
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GROQ_API_KEY` | Yes | none | Groq API key used for LLM generation |
+| `GROQ_MODEL` | No | `qwen/qwen3.6-27b` | Groq model ID |
+| `PORT` | No | `7860` | Flask server port |
+| `MAX_UPLOAD_MB` | No | `25` | Maximum PDF upload size in MB |
+| `APP_STORAGE_DIR` | No | `.` | Base directory for app storage |
+| `DATA_DIR` | No | `<APP_STORAGE_DIR>/data` | PDF upload storage directory |
+| `DB_DIR` | No | `<APP_STORAGE_DIR>/db` | FAISS/chunk storage directory |
+| `CHAT_HISTORY_FILE` | No | `<APP_STORAGE_DIR>/chat_history.json` | Stored chat history file |
 
 ## Deploy to Hugging Face Spaces
 
-### Via GitHub
+1. Push this repo to GitHub.
+2. Create a new Hugging Face Space with Docker as the SDK.
+3. Connect your GitHub repo.
+4. Add `GROQ_API_KEY` as a Space secret.
+5. Optionally set `APP_STORAGE_DIR=/data` if you add Hugging Face persistent
+   storage. Without persistent storage, uploads and chat history last for the
+   running container session but may disappear after rebuilds or restarts.
 
-1. Push this repo to GitHub
-2. Go to [huggingface.co/spaces](https://huggingface.co/spaces) → **Create new Space**
-3. Choose **Docker** as the SDK
-4. Connect your GitHub repo
-5. Add your **Groq API key** as a secret (`GROQ_API_KEY`)
-6. Upload a PDF via the Space's persistent storage or build the index after deploying
+The Docker image pre-downloads the embedding and re-ranking models, rebuilds
+document memory when stored PDFs are present and no FAISS index exists, and
+starts the Flask app with Gunicorn.
 
-The Dockerfile handles everything — no manual configuration needed.
+## Notes
 
-### How it works on HF Spaces
-
-- **FAISS index** stays on the Space's persistent storage (survives restarts)
-- **sentence-transformers** runs locally inside the container
-- **Groq API** handles LLM inference (Mixtral 8x7B — 32K context, fast)
-- The web UI is served by Flask + gunicorn
-
----
-
-## Use Cases
-
-- Personal knowledge assistant
-- Resume/document Q&A system
-- Offline AI chatbot
-- Voice-enabled AI applications
-
----
-
-## Key Learnings
-
-- Built a production-grade **RAG architecture from scratch**
-- Implemented **hybrid search with RRF fusion** for optimal retrieval
-- Integrated **cross-encoder re-ranking** for answer quality
-- Built **recursive semantic chunking** that respects text boundaries
-- Developed **voice-enabled AI interactions**
-- Deployed to **Hugging Face Spaces with Docker**
-- Managed **clean Git workflows and project structure**
-
----
-
-## Author
-
-**Aditya Singh**
-Aspiring AI/ML Engineer focused on building real-world intelligent systems.
-
----
-
-## If you like this project
-
-Give it a ⭐ on GitHub and feel free to contribute!
+- The LLM depends on Groq API for answer generation.
+- Retrieval still uses local FAISS, BM25, sentence-transformer embeddings, and
+  cross-encoder re-ranking.
+- If no FAISS index exists yet, the app still works as a general Groq-powered
+  assistant. Upload PDFs to automatically enable document-grounded answers with
+  source citations.
+- If you regenerate `db/chunks.json` with the current `ingest.py`, answers can
+  include source file and page citations.
