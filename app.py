@@ -9,6 +9,7 @@ Then open http://localhost:7860 in your browser.
 import os
 from pathlib import Path
 import json
+from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, jsonify
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -41,6 +42,36 @@ STORAGE_DIR = Path(os.environ.get("APP_STORAGE_DIR", ".")).expanduser()
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(STORAGE_DIR / "data"))).expanduser()
 DB_DIR = Path(os.environ.get("DB_DIR", str(STORAGE_DIR / "db"))).expanduser()
 ALLOWED_EXTENSIONS = {"pdf"}
+EXPLICIT_FRONTEND_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("FRONTEND_ORIGINS", "").split(",")
+    if origin.strip()
+}
+
+
+def _is_allowed_frontend_origin(origin: str) -> bool:
+    """Allow configured frontends, Vercel previews, and local development."""
+    normalized = origin.rstrip("/")
+    if normalized in EXPLICIT_FRONTEND_ORIGINS:
+        return True
+
+    parsed = urlparse(normalized)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme == "https" and hostname.endswith(".vercel.app"):
+        return True
+    return parsed.scheme in {"http", "https"} and hostname in {"localhost", "127.0.0.1"}
+
+
+@app.after_request
+def add_frontend_cors_headers(response):
+    """Permit the static Vercel UI to call this public API without credentials."""
+    origin = request.headers.get("Origin", "")
+    if origin and _is_allowed_frontend_origin(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+        response.headers.add("Vary", "Origin")
+    return response
 
 
 def _ensure_storage_dirs() -> None:

@@ -527,6 +527,11 @@
     const groqDot = document.getElementById('groq-dot');
     const topStatus = document.getElementById('top-status');
 
+    const RENDER_API_ORIGIN = 'https://rag-t7t1.onrender.com';
+    const SAME_ORIGIN_API_HOSTS = new Set(['rag-t7t1.onrender.com', 'localhost', '127.0.0.1']);
+    const API_ORIGIN = SAME_ORIGIN_API_HOSTS.has(window.location.hostname) ? '' : RENDER_API_ORIGIN;
+    const apiUrl = (path) => `${API_ORIGIN}${path}`;
+
     let stagedFiles = [];
     let isBusy = false;
 
@@ -613,7 +618,7 @@
       if (!cachedDocuments.length) return;
 
       try {
-        const response = await fetch('/api/documents');
+        const response = await fetch(apiUrl('/api/documents'));
         const data = await readApiResponse(response, 'Could not check the document workspace.');
         const serverNames = new Set((data.documents || []).map((document) => document.filename));
         const missing = cachedDocuments.filter((document) => !serverNames.has(document.filename));
@@ -787,7 +792,7 @@
     async function uploadAttachments(files) {
       const formData = new FormData();
       files.forEach((file) => formData.append('documents', file));
-      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      const response = await fetch(apiUrl('/api/upload'), { method: 'POST', body: formData });
       return readApiResponse(response, 'Document upload failed.');
     }
 
@@ -824,7 +829,7 @@
 
         let recentHistory = [];
         try { recentHistory = (await getDeviceMessages()).slice(-3); } catch (_) {}
-        const response = await fetch('/api/chat', {
+        const response = await fetch(apiUrl('/api/chat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: prompt, attachments: uploaded, history: recentHistory }),
@@ -856,7 +861,7 @@
     }
 
     async function refreshDocuments() {
-      const response = await fetch('/api/documents');
+      const response = await fetch(apiUrl('/api/documents'));
       const data = await readApiResponse(response, 'Could not load the document list.');
       const documents = data.documents || [];
       documentCount.textContent = documents.length;
@@ -873,7 +878,7 @@
           if (!document || !window.confirm(`Remove ${document.filename} from this workspace?`)) return;
           button.disabled = true;
           try {
-            const response = await fetch(`/api/documents/${encodeURIComponent(document.filename)}`, { method: 'DELETE' });
+            const response = await fetch(apiUrl(`/api/documents/${encodeURIComponent(document.filename)}`), { method: 'DELETE' });
             await readApiResponse(response, 'Could not remove the document.');
             try { await deviceDelete('documents', document.filename); } catch (_) {}
             showToast(`${document.filename} removed.`);
@@ -888,7 +893,7 @@
     }
 
     async function refreshHealth() {
-      const response = await fetch('/api/health');
+      const response = await fetch(apiUrl('/api/health'));
       const data = await readApiResponse(response, 'Could not load workspace status.');
       indexStatus.textContent = data.index_ready ? 'Ready' : 'Not indexed';
       indexDot.className = `status-dot ${data.index_ready ? 'ready' : 'warning'}`;
@@ -911,7 +916,7 @@
       reindexBtn.disabled = true;
       showToast('Refreshing the document index…');
       try {
-        const response = await fetch('/api/reindex', { method: 'POST' });
+        const response = await fetch(apiUrl('/api/reindex'), { method: 'POST' });
         const data = await readApiResponse(response, 'Index refresh failed.');
         showToast(`Index refreshed with ${data.chunks} searchable sections.`);
         await refreshSystemState();
@@ -920,7 +925,7 @@
     }
 
     async function clearChat() {
-      try { await fetch('/api/clear', { method: 'POST' }); } catch (_) {}
+      try { await fetch(apiUrl('/api/clear'), { method: 'POST' }); } catch (_) {}
       try { await deviceClear('messages'); } catch (_) {}
       chatThread.innerHTML = `
         <div class="welcome" id="welcome">

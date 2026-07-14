@@ -157,6 +157,7 @@ Then open `http://localhost:7860` in your browser.
 | `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | FastEmbed dense retrieval model |
 | `RERANKER_MODEL` | No | `Xenova/ms-marco-MiniLM-L-6-v2` | FastEmbed cross-encoder model |
 | `RAG_LOW_MEMORY_MODE` | No | `1` | Load embedding and reranking models sequentially for 512 MB hosting |
+| `FRONTEND_ORIGINS` | No | none | Extra comma-separated browser origins allowed to call the API |
 
 ## Deploy Free on Render
 
@@ -180,6 +181,22 @@ then starts Flask with Gunicorn on Render's assigned `PORT`.
 - Render provides 750 free instance hours per workspace each month. Without a
   payment method, the service is suspended instead of billing when free limits
   are exhausted.
+
+## Deploy the Frontend on Vercel
+
+The repository also contains a static Vercel build. The browser UI is copied
+from `templates/index.html` into `dist/` and calls the RAG API hosted at
+`https://rag-t7t1.onrender.com`.
+
+```bash
+npm run build
+vercel --prod
+```
+
+Vercel serves only the static frontend. `GROQ_API_KEY` remains private on
+Render and must never be added to Vercel. Browser IndexedDB data is scoped to
+the Vercel domain, so chats and PDFs stored on the Render domain do not
+automatically transfer to the new origin.
 
 ## Notes
 
