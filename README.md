@@ -1,4 +1,4 @@
-Live link _ _ _   '''https://adi080122-local-rag-voice-ai-assistant.hf.space/'''
+---
 title: RAG AI Assistant
 colorFrom: indigo
 colorTo: purple
@@ -7,6 +7,8 @@ app_port: 7860
 ---
 
 # Personal AI Assistant (RAG + Groq API)
+
+[Live application](https://adi080122-local-rag-voice-ai-assistant.hf.space/)
 
 An AI-powered personal assistant built with a Retrieval-Augmented Generation
 (RAG) pipeline. It reads your PDFs, retrieves relevant context with hybrid
