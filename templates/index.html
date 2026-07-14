@@ -925,7 +925,6 @@
     }
 
     async function clearChat() {
-      try { await fetch(apiUrl('/api/clear'), { method: 'POST' }); } catch (_) {}
       try { await deviceClear('messages'); } catch (_) {}
       chatThread.innerHTML = `
         <div class="welcome" id="welcome">

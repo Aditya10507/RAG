@@ -13,3 +13,12 @@ tests
 dist
 .vercel
 node_modules
+.vercelignore
+.gitattributes
+.gitignore
+.env.example
+README.md
+package.json
+scripts
+vercel.json
+render.yaml

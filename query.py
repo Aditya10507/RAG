@@ -8,24 +8,10 @@ import faiss
 import numpy as np
 from fastembed import TextEmbedding
 from fastembed.rerank.cross_encoder import TextCrossEncoder
+from dotenv import load_dotenv
 from rank_bm25 import BM25Okapi
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
-
-if load_dotenv:
-    load_dotenv()
-else:
-    env_path = Path(".env")
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8-sig").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+load_dotenv()
 
 # In-memory conversation history. Each item is a dict: {"user": str, "assistant": str}
 # This is kept in memory only (no persistence) and will be included in prompts
@@ -122,14 +108,7 @@ def _ensure_loaded(db_dir: str = "db"):
         with open(chunks_file, "r", encoding="utf-8") as f:
             raw_chunks = json.load(f)
 
-        # Handle backwards compatibility: old format was list[str]
-        if raw_chunks and isinstance(raw_chunks[0], str):
-            _GLOBAL["chunks"] = [
-                {"text": c, "metadata": {"source": "unknown"}}
-                for i, c in enumerate(raw_chunks)
-            ]
-        else:
-            _GLOBAL["chunks"] = raw_chunks
+        _GLOBAL["chunks"] = raw_chunks
 
     # --- Build BM25 index ---
     if _GLOBAL["bm25"] is None:
@@ -389,8 +368,9 @@ def get_response(
     3. Context assembly with source metadata
     4. LLM generation via the Groq API
 
-    Returns the assistant's answer as a string and appends the interaction
-    to the in-memory `chat_history`.
+    Returns the assistant's answer as a string. CLI callers can retain the
+    interaction in the in-memory `chat_history`; the web UI stores history in
+    browser IndexedDB and disables server-side recording.
     """
     try:
         _ensure_loaded(db_dir)

@@ -23,3 +23,5 @@ services:
         value: Xenova/ms-marco-MiniLM-L-6-v2
       - key: RAG_LOW_MEMORY_MODE
         value: "1"
+      - key: FRONTEND_ORIGINS
+        value: https://archive-ai-rag.vercel.app
