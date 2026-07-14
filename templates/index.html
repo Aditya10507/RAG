@@ -49,6 +49,9 @@
       min-height: 0;
     }
 
+    .app-shell.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+    .app-shell.sidebar-collapsed .sidebar { visibility: hidden; overflow: hidden; padding-inline: 0; }
+
     .sidebar {
       display: flex;
       flex-direction: column;
@@ -223,6 +226,8 @@
       background: rgba(255,255,255,.98);
     }
 
+    .topbar-leading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
     .topbar-title { min-width: 0; }
     .topbar-title h1 { margin: 0; font-size: 14px; font-weight: 700; }
     .topbar-title p { overflow: hidden; margin: 3px 0 0; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -393,6 +398,7 @@
     @media (max-width: 860px) {
       .app-shell { grid-template-columns: 1fr; }
       .sidebar { display: none; }
+      #sidebar-toggle { display: none; }
       #mobile-new-btn { display: grid; }
       .topbar { padding: 0 16px; }
       .chat-thread { padding: 30px 18px 42px; }
@@ -414,7 +420,7 @@
   </style>
 </head>
 <body>
-  <div class="app-shell">
+  <div class="app-shell" id="app-shell">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">
@@ -445,7 +451,12 @@
 
     <main class="workspace">
       <header class="topbar">
-        <div class="topbar-title"><h1>Document workspace</h1><p id="top-status">Preparing your workspace…</p></div>
+        <div class="topbar-leading">
+          <button class="icon-button" id="sidebar-toggle" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.5 6-6 6 6 6"/></svg>
+          </button>
+          <div class="topbar-title"><h1>Document workspace</h1><p id="top-status">Preparing your workspace…</p></div>
+        </div>
         <div class="topbar-actions">
           <button class="icon-button" id="mobile-new-btn" title="New conversation">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
@@ -496,6 +507,8 @@
   <script>
     const chatScroll = document.getElementById('chat-scroll');
     const chatThread = document.getElementById('chat-thread');
+    const appShell = document.getElementById('app-shell');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
     const attachBtn = document.getElementById('attach-btn');
@@ -516,6 +529,120 @@
 
     let stagedFiles = [];
     let isBusy = false;
+
+    function setSidebarCollapsed(collapsed) {
+      appShell.classList.toggle('sidebar-collapsed', collapsed);
+      sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+      sidebarToggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      sidebarToggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+      sidebarToggle.innerHTML = collapsed
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9.5 6 6 6-6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.5 6-6 6 6 6"/></svg>';
+      localStorage.setItem('archive-ai-sidebar-collapsed', collapsed ? '1' : '0');
+    }
+
+    setSidebarCollapsed(localStorage.getItem('archive-ai-sidebar-collapsed') === '1');
+
+    const DEVICE_DB_NAME = 'archive-ai-device';
+    const DEVICE_DB_VERSION = 1;
+    let deviceDbPromise = null;
+
+    function openDeviceDb() {
+      if (deviceDbPromise) return deviceDbPromise;
+      deviceDbPromise = new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject(new Error('Browser device storage is unavailable.'));
+          return;
+        }
+        const request = indexedDB.open(DEVICE_DB_NAME, DEVICE_DB_VERSION);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('documents')) {
+            db.createObjectStore('documents', { keyPath: 'filename' });
+          }
+          if (!db.objectStoreNames.contains('messages')) {
+            db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Could not open browser device storage.'));
+      });
+      return deviceDbPromise;
+    }
+
+    async function deviceRequest(storeName, mode, operation) {
+      const db = await openDeviceDb();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, mode);
+        const request = operation(transaction.objectStore(storeName));
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Browser device storage operation failed.'));
+      });
+    }
+
+    const deviceGetAll = (storeName) => deviceRequest(storeName, 'readonly', (store) => store.getAll());
+    const devicePut = (storeName, value) => deviceRequest(storeName, 'readwrite', (store) => store.put(value));
+    const deviceAdd = (storeName, value) => deviceRequest(storeName, 'readwrite', (store) => store.add(value));
+    const deviceDelete = (storeName, key) => deviceRequest(storeName, 'readwrite', (store) => store.delete(key));
+    const deviceClear = (storeName) => deviceRequest(storeName, 'readwrite', (store) => store.clear());
+
+    async function cacheUploadedDocuments(files, uploaded) {
+      for (let index = 0; index < uploaded.length; index += 1) {
+        const file = files[index];
+        const stored = uploaded[index];
+        if (!file || !stored?.filename) continue;
+        await devicePut('documents', {
+          filename: stored.filename,
+          blob: file,
+          size: file.size,
+          type: file.type || 'application/pdf',
+          lastModified: file.lastModified || Date.now(),
+        });
+      }
+    }
+
+    async function getDeviceMessages() {
+      const messages = await deviceGetAll('messages');
+      return messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    }
+
+    async function restoreDeviceDocuments() {
+      let cachedDocuments = [];
+      try { cachedDocuments = await deviceGetAll('documents'); }
+      catch (_) { return; }
+      if (!cachedDocuments.length) return;
+
+      try {
+        const response = await fetch('/api/documents');
+        const data = await readApiResponse(response, 'Could not check the document workspace.');
+        const serverNames = new Set((data.documents || []).map((document) => document.filename));
+        const missing = cachedDocuments.filter((document) => !serverNames.has(document.filename));
+        if (!missing.length) return;
+
+        isBusy = true;
+        updateSendState();
+        topStatus.textContent = `Restoring ${missing.length} document${missing.length === 1 ? '' : 's'} from this device…`;
+
+        for (const document of missing) {
+          const file = new File([document.blob], document.filename, {
+            type: document.type || 'application/pdf',
+            lastModified: document.lastModified || Date.now(),
+          });
+          const upload = await uploadAttachments([file]);
+          const restored = upload.uploaded?.[0];
+          if (restored?.filename && restored.filename !== document.filename) {
+            await deviceDelete('documents', document.filename);
+            await cacheUploadedDocuments([file], [restored]);
+          }
+        }
+        showToast(`${missing.length} document${missing.length === 1 ? '' : 's'} restored from this device.`);
+      } catch (error) {
+        showToast(`Device restore paused: ${error.message}`, 'error');
+      } finally {
+        isBusy = false;
+        updateSendState();
+      }
+    }
 
     const fileIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4M9 12h6M9 16h4"/></svg>`;
     const trashIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M9 7V4.5h6V7m-8.5 0 .75 12h9.5l.75-12M10 10.5v5M14 10.5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -688,21 +815,32 @@
         if (files.length) {
           const uploadResult = await uploadAttachments(files);
           uploaded = uploadResult.uploaded || [];
+          try { await cacheUploadedDocuments(files, uploaded); } catch (_) {}
           const cards = userMessage.querySelector('.message-attachments');
           if (cards) cards.outerHTML = attachmentCards(uploaded, 'ready');
           updateProcessing('Searching your document workspace…');
           await refreshSystemState();
         }
 
+        let recentHistory = [];
+        try { recentHistory = (await getDeviceMessages()).slice(-3); } catch (_) {}
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: prompt, attachments: uploaded }),
+          body: JSON.stringify({ message: prompt, attachments: uploaded, history: recentHistory }),
         });
         const data = await readApiResponse(response, 'The assistant could not complete the request.');
 
         hideProcessing();
         chatThread.appendChild(createMessage('assistant', data.reply));
+        try {
+          await deviceAdd('messages', {
+            user: prompt,
+            assistant: data.reply,
+            attachments: uploaded,
+            createdAt: Date.now(),
+          });
+        } catch (_) {}
         scrollToBottom();
       } catch (error) {
         hideProcessing();
@@ -737,6 +875,7 @@
           try {
             const response = await fetch(`/api/documents/${encodeURIComponent(document.filename)}`, { method: 'DELETE' });
             await readApiResponse(response, 'Could not remove the document.');
+            try { await deviceDelete('documents', document.filename); } catch (_) {}
             showToast(`${document.filename} removed.`);
             await refreshSystemState();
           } catch (error) {
@@ -782,6 +921,7 @@
 
     async function clearChat() {
       try { await fetch('/api/clear', { method: 'POST' }); } catch (_) {}
+      try { await deviceClear('messages'); } catch (_) {}
       chatThread.innerHTML = `
         <div class="welcome" id="welcome">
           <div class="welcome-eyebrow">Private document workspace</div>
@@ -800,9 +940,7 @@
 
     async function loadHistory() {
       try {
-        const response = await fetch('/api/history');
-        const data = await readApiResponse(response, 'Could not load chat history.');
-        const history = data.history || [];
+        const history = await getDeviceMessages();
         if (!history.length) return;
         document.getElementById('welcome')?.remove();
         history.forEach((turn) => {
@@ -846,6 +984,9 @@
       if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }
     });
     sendBtn.addEventListener('click', sendMessage);
+    sidebarToggle.addEventListener('click', () => {
+      setSidebarCollapsed(!appShell.classList.contains('sidebar-collapsed'));
+    });
     clearBtn.addEventListener('click', clearChat);
     mobileNewBtn.addEventListener('click', clearChat);
     reindexBtn.addEventListener('click', rebuildIndex);
@@ -856,9 +997,14 @@
       } catch (_) { showToast('Unable to reach the workspace service.', 'error'); }
     });
 
+    async function initializeWorkspace() {
+      await loadHistory();
+      await restoreDeviceDocuments();
+      await refreshSystemState();
+    }
+
     bindSuggestions();
-    loadHistory();
-    refreshSystemState();
+    initializeWorkspace();
     messageInput.focus();
   </script>
 </body>

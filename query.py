@@ -49,6 +49,7 @@ _DENSE_TOP_K = 20
 _SPARSE_TOP_K = 20
 _RRF_TOP_K = 15
 _DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
+_DEFAULT_FAST_GROQ_MODEL = "openai/gpt-oss-20b"
 _DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 _DEFAULT_RERANKER_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
 
@@ -130,13 +131,6 @@ def _ensure_loaded(db_dir: str = "db"):
         else:
             _GLOBAL["chunks"] = raw_chunks
 
-    # --- Load quantized ONNX embedding model ---
-    if _GLOBAL["embedding_model"] is None:
-        _GLOBAL["embedding_model"] = TextEmbedding(
-            model_name=embedding_model_name,
-            threads=1,
-        )
-
     # --- Build BM25 index ---
     if _GLOBAL["bm25"] is None:
         tokenized_corpus = [_tokenize(c["text"]) for c in _GLOBAL["chunks"]]
@@ -150,6 +144,15 @@ def _search_hybrid(query: str, allowed_indices: list[int] | None = None) -> list
     Returns a list of chunk indices sorted by combined relevance.
     """
     allowed = set(allowed_indices) if allowed_indices is not None else None
+
+    if _GLOBAL["embedding_model"] is None:
+        embedding_model_name = os.environ.get(
+            "EMBEDDING_MODEL", _DEFAULT_EMBEDDING_MODEL
+        )
+        _GLOBAL["embedding_model"] = TextEmbedding(
+            model_name=embedding_model_name,
+            threads=1,
+        )
 
     # --- Dense search via FAISS ---
     try:
@@ -229,9 +232,13 @@ def _rerank(query: str, indices: list[int]) -> list[int]:
     return [idx for idx, _score in scored]
 
 
-def _format_recent_history(last_n: int = 3) -> str:
+def _format_recent_history(
+    last_n: int = 3,
+    conversation_history: list[dict] | None = None,
+) -> str:
     """Format recent chat turns for prompt context."""
-    recent = chat_history[-last_n:]
+    history = chat_history if conversation_history is None else conversation_history
+    recent = history[-last_n:]
     if not recent:
         return ""
 
@@ -243,16 +250,33 @@ def _format_recent_history(last_n: int = 3) -> str:
     return "\n".join(history_lines)
 
 
-def _build_prompt(user_query: str, context: str) -> str:
+def _build_prompt(
+    user_query: str,
+    context: str,
+    attached_sources: list[str] | None = None,
+    conversation_history: list[dict] | None = None,
+) -> str:
     """Build the RAG prompt with system instruction, history, and context."""
     last_n = 3
-    history_text = _format_recent_history(last_n)
+    history_text = _format_recent_history(last_n, conversation_history)
 
-    system_instruction = (
-        "You are a helpful personal AI assistant. Answer clearly and based only on the provided context. "
-        "If the answer is not contained in the context, say 'I don't know' rather than guessing. "
-        "Respond naturally and conversationally."
-    )
+    if attached_sources:
+        source_names = ", ".join(attached_sources)
+        system_instruction = (
+            "You are a precise document analyst. The context below was extracted directly from "
+            f"the user's attached document(s): {source_names}. Treat that context as the attached "
+            "document; never claim that no document is attached or ask for a separate document. "
+            "Answer the request directly and synthesize useful details instead of merely describing "
+            "what information exists. For a summary or briefing, lead with a concise overview and "
+            "then organize the most important experience, skills, projects, achievements, dates, or "
+            "risks that are actually present. Do not invent missing facts."
+        )
+    else:
+        system_instruction = (
+            "You are a precise document analyst. Answer clearly and only from the provided context. "
+            "If the answer is not contained in the context, say so briefly rather than guessing. "
+            "Synthesize the information into a useful answer instead of talking about the retrieval process."
+        )
 
     prompt = system_instruction + "\n\n"
     if history_text:
@@ -262,14 +286,17 @@ def _build_prompt(user_query: str, context: str) -> str:
         "Context (use this information as the only source):\n"
         f"{context}\n\n"
         f"User question: {user_query}\n\n"
-        "Assistant (answer conversationally and concisely):"
+        "Assistant (give a direct, polished, well-structured answer):"
     )
     return prompt
 
 
-def _build_general_prompt(user_query: str) -> str:
+def _build_general_prompt(
+    user_query: str,
+    conversation_history: list[dict] | None = None,
+) -> str:
     """Build a general chat prompt used before any document index exists."""
-    history_text = _format_recent_history()
+    history_text = _format_recent_history(conversation_history=conversation_history)
     system_instruction = (
         "You are a helpful personal AI assistant. Answer naturally and clearly. "
         "No searchable PDF index is available for this exchange, so do not claim to have read "
@@ -297,34 +324,53 @@ def _generate_with_groq(prompt: str) -> str:
             "before starting the assistant."
         )
 
-    model = os.environ.get("GROQ_MODEL", _DEFAULT_GROQ_MODEL).strip() or _DEFAULT_GROQ_MODEL
+    configured_model = os.environ.get("GROQ_MODEL", _DEFAULT_GROQ_MODEL).strip() or _DEFAULT_GROQ_MODEL
+    fast_model = os.environ.get(
+        "GROQ_LOW_LATENCY_MODEL", _DEFAULT_FAST_GROQ_MODEL
+    ).strip() or _DEFAULT_FAST_GROQ_MODEL
+    model_candidates = list(dict.fromkeys([fast_model, configured_model]))
 
     from groq import Groq
 
     client = Groq(api_key=api_key)
-    request_kwargs = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1024,
-        "temperature": 0.7,
-    }
-    if model.startswith("qwen/"):
-        request_kwargs["reasoning_format"] = "hidden"
-        request_kwargs["reasoning_effort"] = "none"
+    last_error = None
+    for position, model in enumerate(model_candidates):
+        request_kwargs = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 700,
+            "temperature": 0.2,
+        }
+        if model.startswith("qwen/"):
+            request_kwargs["reasoning_format"] = "hidden"
+            request_kwargs["reasoning_effort"] = "none"
+        elif model.startswith("openai/gpt-oss"):
+            request_kwargs["reasoning_format"] = "hidden"
+            request_kwargs["reasoning_effort"] = "low"
 
-    try:
-        completion = client.chat.completions.create(
-            **request_kwargs
-        )
-    except Exception as e:
-        error_text = str(e)
-        if "blocked at the project level" in error_text or "model_permission_blocked_project" in error_text:
-            raise RuntimeError(
-                f"Groq model '{model}' is blocked for this project. "
-                "Change GROQ_MODEL in .env to an enabled model, or enable the model in Groq project settings."
-            ) from e
-        raise
-    return _clean_model_answer(completion.choices[0].message.content)
+        try:
+            completion = client.chat.completions.create(**request_kwargs)
+            return _clean_model_answer(completion.choices[0].message.content)
+        except Exception as e:
+            last_error = e
+            error_text = str(e).lower()
+            model_unavailable = any(marker in error_text for marker in (
+                "blocked at the project level",
+                "model_permission_blocked_project",
+                "model_not_found",
+                "does not exist",
+                "permission",
+            ))
+            if position < len(model_candidates) - 1 and model_unavailable:
+                continue
+            if model_unavailable:
+                raise RuntimeError(
+                    f"Groq model '{model}' is unavailable for this project. "
+                    "Enable it in Groq model permissions or configure another model."
+                ) from e
+            raise
+
+    raise RuntimeError(f"Groq generation failed: {last_error}")
 
 
 def get_response(
@@ -332,6 +378,8 @@ def get_response(
     db_dir: str = "db",
     k: int = 5,
     source_filenames: list[str] | None = None,
+    conversation_history: list[dict] | None = None,
+    record_history: bool = True,
 ) -> str:
     """Answer a question using the full RAG pipeline: hybrid search → re-rank → generate.
 
@@ -347,10 +395,11 @@ def get_response(
     try:
         _ensure_loaded(db_dir)
     except FileNotFoundError:
-        prompt = _build_general_prompt(user_query)
+        prompt = _build_general_prompt(user_query, conversation_history)
         answer = _generate_with_groq(prompt)
         final_answer = str(answer) if answer is not None else "I'm sorry, I couldn't generate a response."
-        chat_history.append({"user": user_query, "assistant": final_answer})
+        if record_history:
+            chat_history.append({"user": user_query, "assistant": final_answer})
         return final_answer
 
     chunks = _GLOBAL["chunks"]
@@ -368,14 +417,37 @@ def get_response(
                 "Please attach it again."
             )
 
-    # Step 1: Hybrid search (FAISS + BM25 with RRF)
-    hybrid_indices = _search_hybrid(user_query, allowed_indices=allowed_indices)
+    normalized_query = user_query.lower()
+    summary_request = any(term in normalized_query for term in (
+        "summar", "brief", "overview", "key points", "tell me about", "describe this"
+    ))
+    searchable_sources = {
+        chunk.get("metadata", {}).get("source")
+        for index, chunk in enumerate(chunks)
+        if (allowed_indices is None or index in allowed_indices)
+        and chunk.get("metadata", {}).get("source")
+    }
+    single_document_search = len(searchable_sources) == 1
 
-    # Step 2: Cross-encoder re-ranking
-    reranked_indices = _rerank(user_query, hybrid_indices)
+    if single_document_search and summary_request:
+        # A summary needs broad document coverage, not only the most query-like chunks.
+        summary_indices = allowed_indices if allowed_indices is not None else list(range(len(chunks)))
+        reranked_indices = summary_indices[:12]
+    else:
+        # Step 1: Hybrid search (FAISS + BM25 with RRF)
+        hybrid_indices = _search_hybrid(user_query, allowed_indices=allowed_indices)
 
-    # Step 3: Take top-k results
-    top_indices = reranked_indices[:k]
+        # Loading a cross-encoder for candidates from one already-scoped file adds
+        # substantial latency on free hosting without improving source selection.
+        reranked_indices = (
+            hybrid_indices
+            if single_document_search
+            else _rerank(user_query, hybrid_indices)
+        )
+
+    # Step 3: Summaries benefit from broader ordered coverage of the file.
+    result_limit = 10 if single_document_search and summary_request else k
+    top_indices = reranked_indices[:result_limit]
 
     # Step 4: Build context with source tracking
     retrieved = [chunks[i] for i in top_indices]
@@ -400,7 +472,12 @@ def get_response(
     context = "\n\n".join(context_parts)
 
     # Step 5: Build prompt and generate
-    prompt = _build_prompt(user_query, context)
+    prompt = _build_prompt(
+        user_query,
+        context,
+        attached_sources=source_filenames,
+        conversation_history=conversation_history,
+    )
 
     answer = _generate_with_groq(prompt)
 
@@ -411,7 +488,8 @@ def get_response(
     if unique_sources and len(final_answer) > 0:
         final_answer += f"\n\n---\n*Sources: {', '.join(unique_sources)}*"
 
-    chat_history.append({"user": user_query, "assistant": final_answer})
+    if record_history:
+        chat_history.append({"user": user_query, "assistant": final_answer})
     return final_answer
 
 
