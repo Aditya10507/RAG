@@ -20,4 +20,4 @@ fi
 
 # Start the web server
 echo "Starting AI Assistant..."
-exec gunicorn --bind 0.0.0.0:7860 --workers 1 --timeout 120 app:app
+exec gunicorn --bind "0.0.0.0:${PORT:-7860}" --workers 1 --threads 2 --timeout 180 app:app

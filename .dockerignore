@@ -1,0 +1,12 @@
+.git
+.github
+.env
+.venv
+venv
+__pycache__
+*.py[cod]
+*.log
+*.pdf
+data
+db
+tests

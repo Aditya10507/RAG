@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: aditya-rag-assistant
+    runtime: docker
+    plan: free
+    region: singapore
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: qwen/qwen3.6-27b
+      - key: APP_STORAGE_DIR
+        value: /tmp/archive-ai
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: RERANKER_MODEL
+        value: Xenova/ms-marco-MiniLM-L-6-v2

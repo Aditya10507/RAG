@@ -6,20 +6,21 @@ RUN useradd -m -u 1000 user
 # Set environment variables
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    OMP_NUM_THREADS=1 \
+    ORT_NUM_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false
 
 # Set working directory
 WORKDIR $HOME/app
 
 # Copy requirements first for better Docker layer caching
 COPY --chown=user requirements.txt .
-# The Space runs on CPU hardware. Install the CPU wheel explicitly before
-# sentence-transformers so pip does not pull multi-gigabyte CUDA libraries.
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.13.0+cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the sentence-transformers and cross-encoder models so first request is fast
-RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('all-MiniLM-L6-v2'); CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+# Cache compact ONNX retrieval models during the build so runtime startup does
+# not depend on downloading model weights.
+RUN python -c "from fastembed import TextEmbedding; from fastembed.rerank.cross_encoder import TextCrossEncoder; list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5', threads=1).embed(['warmup'])); list(TextCrossEncoder(model_name='Xenova/ms-marco-MiniLM-L-6-v2', threads=1).rerank('warmup', ['warmup']))"
 
 # Copy the rest of the application
 COPY --chown=user . .
@@ -27,7 +28,10 @@ COPY --chown=user . .
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
-# Expose the port HF Spaces expects
+RUN chown -R user:user /home/user
+USER user
+
+# Render supplies PORT at runtime; 7860 remains the local/HF fallback.
 EXPOSE 7860
 
 # Run entrypoint that auto-builds the index if needed, then starts the server
