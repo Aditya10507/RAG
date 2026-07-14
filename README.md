@@ -1,14 +1,6 @@
----
-title: RAG AI Assistant
-colorFrom: indigo
-colorTo: purple
-sdk: docker
-app_port: 7860
----
-
 # Personal AI Assistant (RAG + Groq API)
 
-[Live application](https://adi080122-rag-assistant.hf.space/)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Aditya10507/RAG)
 
 An AI-powered personal assistant built with a Retrieval-Augmented Generation
 (RAG) pipeline. It reads your PDFs, retrieves relevant context with hybrid
@@ -34,10 +26,10 @@ search, and generates answers through the Groq API.
 |---|---|
 | Language | Python |
 | LLM | Groq API, default `qwen/qwen3.6-27b` |
-| Embeddings | Sentence Transformers (`all-MiniLM-L6-v2`) |
+| Embeddings | FastEmbed ONNX (`BAAI/bge-small-en-v1.5`) |
 | Sparse Retrieval | BM25 (`rank-bm25`) |
 | Dense Retrieval | FAISS |
-| Re-Ranking | Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) |
+| Re-Ranking | FastEmbed ONNX Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) |
 | Fusion Strategy | Reciprocal Rank Fusion (RRF) |
 | Web Framework | Flask + Gunicorn |
 
@@ -64,8 +56,9 @@ rag-assistant/
 |-- ingest.py           # PDF processing, chunking, embeddings, FAISS index
 |-- templates/
 |   `-- index.html      # Chat UI
-|-- Dockerfile          # Hugging Face Spaces container definition
+|-- Dockerfile          # CPU-only production container definition
 |-- entrypoint.sh       # Container startup script
+|-- render.yaml         # Free Render Blueprint
 |-- requirements.txt
 |-- .env.example
 `-- README.md
@@ -157,26 +150,37 @@ Then open `http://localhost:7860` in your browser.
 | `DATA_DIR` | No | `<APP_STORAGE_DIR>/data` | PDF upload storage directory |
 | `DB_DIR` | No | `<APP_STORAGE_DIR>/db` | FAISS/chunk storage directory |
 | `CHAT_HISTORY_FILE` | No | `<APP_STORAGE_DIR>/chat_history.json` | Stored chat history file |
+| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | FastEmbed dense retrieval model |
+| `RERANKER_MODEL` | No | `Xenova/ms-marco-MiniLM-L-6-v2` | FastEmbed cross-encoder model |
 
-## Deploy to Hugging Face Spaces
+## Deploy Free on Render
 
-1. Push this repo to GitHub.
-2. Create a new Hugging Face Space with Docker as the SDK.
-3. Connect your GitHub repo.
-4. Add `GROQ_API_KEY` as a Space secret.
-5. Optionally set `APP_STORAGE_DIR=/data` if you add Hugging Face persistent
-   storage. Without persistent storage, uploads and chat history last for the
-   running container session but may disappear after rebuilds or restarts.
+1. Click the **Deploy to Render** button above and sign in with GitHub.
+2. Confirm that the service plan is **Free**.
+3. Enter `GROQ_API_KEY` when Render requests the secret value.
+4. Approve the Blueprint and wait for the first Docker build to finish.
 
-The Docker image pre-downloads the embedding and re-ranking models, rebuilds
-document memory when stored PDFs are present and no FAISS index exists, and
-starts the Flask app with Gunicorn.
+No payment method is needed for the free service. The Docker image uses compact,
+quantized ONNX models instead of PyTorch so it fits Render's 512 MB free
+instance. It pre-downloads the embedding and reranking weights during the build,
+then starts Flask with Gunicorn on Render's assigned `PORT`.
+
+### Free-tier behavior
+
+- Render spins the service down after 15 minutes without traffic. The first
+  visitor after that should allow roughly one minute for it to wake up.
+- Free service storage is ephemeral. Uploaded PDFs, their generated index, and
+  chat history work during the active session but are cleared when Render spins
+  down, restarts, or redeploys the container.
+- Render provides 750 free instance hours per workspace each month. Without a
+  payment method, the service is suspended instead of billing when free limits
+  are exhausted.
 
 ## Notes
 
 - The LLM depends on Groq API for answer generation.
-- Retrieval still uses local FAISS, BM25, sentence-transformer embeddings, and
-  cross-encoder re-ranking.
+- Retrieval uses local FAISS, BM25, quantized ONNX embeddings, and ONNX
+  cross-encoder reranking; no retrieval API key or GPU is required.
 - If no FAISS index exists yet, the app still works as a general Groq-powered
   assistant. Upload PDFs to automatically enable document-grounded answers with
   source citations.

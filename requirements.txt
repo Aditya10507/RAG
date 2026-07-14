@@ -1,5 +1,5 @@
 flask>=3.0.0
-sentence-transformers>=2.2.0
+fastembed==0.8.0
 faiss-cpu>=1.7.0
 numpy>=1.24.0
 pypdf>=3.0.0

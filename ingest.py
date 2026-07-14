@@ -108,7 +108,7 @@ def ingest_pdf(data_dir: str = "data", db_dir: str = "db") -> None:
     - Uses pypdf to read PDF text page-by-page
     - Recursively chunks preserving paragraph/sentence boundaries
     - Tracks per-chunk metadata (source file, page number)
-    - Embeds using sentence-transformers (no API keys needed)
+    - Embeds using FastEmbed's quantized ONNX model (no API keys needed)
     - Saves both the FAISS index and chunk texts with metadata
     """
 
@@ -152,20 +152,25 @@ def ingest_pdf(data_dir: str = "data", db_dir: str = "db") -> None:
             "or add OCR support for scanned documents."
         )
 
-    # 4) Generate embeddings locally using sentence-transformers
+    # 4) Generate embeddings locally using a compact, CPU-only ONNX model.
+    # This preserves semantic retrieval while fitting small free-tier instances.
     print("Loading embedding model and generating vectors...", flush=True)
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
     import faiss
     import numpy as np
 
-    st_model = SentenceTransformer("all-MiniLM-L6-v2")
+    model_name = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+    embedding_model = TextEmbedding(model_name=model_name, threads=1)
     chunk_texts = [c["text"] for c in all_chunks]
-    vectors = st_model.encode(chunk_texts, convert_to_numpy=True, show_progress_bar=True)
+    vectors = np.asarray(
+        list(embedding_model.passage_embed(chunk_texts)),
+        dtype="float32",
+    )
 
-    # 5) Build a FAISS index from the vectors
-    vectors = np.array(vectors).astype("float32")
+    # 5) Build a cosine-similarity FAISS index from normalized vectors
+    faiss.normalize_L2(vectors)
     dim = vectors.shape[1]
-    index = faiss.IndexFlatL2(dim)
+    index = faiss.IndexFlatIP(dim)
     index.add(vectors)
 
     db_path = Path(db_dir)
@@ -175,6 +180,18 @@ def ingest_pdf(data_dir: str = "data", db_dir: str = "db") -> None:
     # 6) Save chunks with metadata
     with open(db_path / "chunks.json", "w", encoding="utf-8") as f:
         json.dump(all_chunks, f, ensure_ascii=False)
+
+    with open(db_path / "manifest.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "embedding_model": model_name,
+                "metric": "cosine",
+                "dimensions": dim,
+                "chunk_count": len(all_chunks),
+            },
+            f,
+            ensure_ascii=False,
+        )
 
     print(f"Saved FAISS index and {len(all_chunks)} chunks (with metadata) to {db_path}", flush=True)
 

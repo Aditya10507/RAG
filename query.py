@@ -5,7 +5,8 @@ import re
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from fastembed import TextEmbedding
+from fastembed.rerank.cross_encoder import TextCrossEncoder
 from rank_bm25 import BM25Okapi
 
 try:
@@ -34,7 +35,7 @@ chat_history = []
 _GLOBAL = {
     "index": None,
     "chunks": None,  # list of dicts: {"text": str, "metadata": dict}
-    "st_model": None,
+    "embedding_model": None,
     "bm25": None,  # BM25Okapi instance
     "cross_encoder": None,
 }
@@ -47,6 +48,8 @@ _DENSE_TOP_K = 20
 _SPARSE_TOP_K = 20
 _RRF_TOP_K = 15
 _DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
+_DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+_DEFAULT_RERANKER_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
 
 
 def _clean_model_answer(answer: str) -> str:
@@ -67,10 +70,14 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _ensure_loaded(db_dir: str = "db"):
-    """Lazy-load FAISS index, chunks, BM25 index, and cross-encoder model."""
+    """Lazy-load the FAISS, BM25, embedding, and reranking resources."""
     db_path = Path(db_dir)
     index_file = db_path / "index.faiss"
     chunks_file = db_path / "chunks.json"
+    manifest_file = db_path / "manifest.json"
+    embedding_model_name = os.environ.get(
+        "EMBEDDING_MODEL", _DEFAULT_EMBEDDING_MODEL
+    )
 
     # --- Load FAISS + chunks ---
     if _GLOBAL["index"] is None:
@@ -78,6 +85,20 @@ def _ensure_loaded(db_dir: str = "db"):
             raise FileNotFoundError(
                 f"FAISS DB not found in {db_dir}. Run `python ingest.py` first."
             )
+
+        if not manifest_file.exists():
+            raise FileNotFoundError(
+                "The document index uses the previous embedding format. "
+                "Re-upload the PDFs or run `python ingest.py` to rebuild it."
+            )
+        with open(manifest_file, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if manifest.get("embedding_model") != embedding_model_name:
+            raise FileNotFoundError(
+                "The document index was built with a different embedding model. "
+                "Re-upload the PDFs or run `python ingest.py` to rebuild it."
+            )
+
         _GLOBAL["index"] = faiss.read_index(str(index_file))
         with open(chunks_file, "r", encoding="utf-8") as f:
             raw_chunks = json.load(f)
@@ -91,9 +112,12 @@ def _ensure_loaded(db_dir: str = "db"):
         else:
             _GLOBAL["chunks"] = raw_chunks
 
-    # --- Load sentence-transformer model ---
-    if _GLOBAL["st_model"] is None:
-        _GLOBAL["st_model"] = SentenceTransformer("all-MiniLM-L6-v2")
+    # --- Load quantized ONNX embedding model ---
+    if _GLOBAL["embedding_model"] is None:
+        _GLOBAL["embedding_model"] = TextEmbedding(
+            model_name=embedding_model_name,
+            threads=1,
+        )
 
     # --- Build BM25 index ---
     if _GLOBAL["bm25"] is None:
@@ -102,8 +126,12 @@ def _ensure_loaded(db_dir: str = "db"):
 
     # --- Load cross-encoder for re-ranking ---
     if _GLOBAL["cross_encoder"] is None:
-        _GLOBAL["cross_encoder"] = CrossEncoder(
-            "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        reranker_model_name = os.environ.get(
+            "RERANKER_MODEL", _DEFAULT_RERANKER_MODEL
+        )
+        _GLOBAL["cross_encoder"] = TextCrossEncoder(
+            model_name=reranker_model_name,
+            threads=1,
         )
 
 
@@ -113,10 +141,13 @@ def _search_hybrid(query: str) -> list[int]:
     Returns a list of chunk indices sorted by combined relevance.
     """
     # --- Dense search via FAISS ---
-    q_vec = _GLOBAL["st_model"].encode(
-        [query], convert_to_numpy=True
-    ).astype("float32")
-    dense_distances, dense_indices = _GLOBAL["index"].search(q_vec, _DENSE_TOP_K)
+    q_vec = np.asarray(
+        list(_GLOBAL["embedding_model"].query_embed(query)),
+        dtype="float32",
+    )
+    faiss.normalize_L2(q_vec)
+    dense_k = min(_DENSE_TOP_K, _GLOBAL["index"].ntotal)
+    _dense_scores, dense_indices = _GLOBAL["index"].search(q_vec, dense_k)
 
     # --- Sparse search via BM25 ---
     tokenized_query = _tokenize(query)
@@ -127,6 +158,8 @@ def _search_hybrid(query: str) -> list[int]:
     rrf_scores: dict[int, float] = {}
 
     for rank, idx in enumerate(dense_indices[0].tolist()):
+        if idx < 0:
+            continue
         rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (_RRF_K + rank + 1)
 
     for rank, idx in enumerate(sparse_top_indices.tolist()):
@@ -147,10 +180,10 @@ def _rerank(query: str, indices: list[int]) -> list[int]:
         return []
 
     chunks = _GLOBAL["chunks"]
-    pairs = [(query, chunks[i]["text"]) for i in indices]
+    documents = [chunks[i]["text"] for i in indices]
 
-    # Cross-encoder returns a relevance score per pair
-    scores = _GLOBAL["cross_encoder"].predict(pairs, show_progress_bar=False)
+    # ONNX cross-encoder returns a relevance score per document.
+    scores = list(_GLOBAL["cross_encoder"].rerank(query, documents))
 
     scored = list(zip(indices, scores))
     scored.sort(key=lambda x: x[1], reverse=True)
