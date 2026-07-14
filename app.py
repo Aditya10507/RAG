@@ -40,41 +40,12 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 
 STORAGE_DIR = Path(os.environ.get("APP_STORAGE_DIR", ".")).expanduser()
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(STORAGE_DIR / "data"))).expanduser()
 DB_DIR = Path(os.environ.get("DB_DIR", str(STORAGE_DIR / "db"))).expanduser()
-CHAT_HISTORY_FILE = Path(
-    os.environ.get("CHAT_HISTORY_FILE", str(STORAGE_DIR / "chat_history.json"))
-).expanduser()
 ALLOWED_EXTENSIONS = {"pdf"}
 
 
 def _ensure_storage_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     DB_DIR.mkdir(parents=True, exist_ok=True)
-    CHAT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-
-def _load_chat_history() -> None:
-    """Load saved chat turns from disk for a simple persistent chat experience."""
-    if not CHAT_HISTORY_FILE.exists():
-        return
-
-    try:
-        with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
-            saved = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return
-
-    if isinstance(saved, list):
-        chat_history.clear()
-        chat_history.extend(
-            item for item in saved
-            if isinstance(item, dict) and "user" in item and "assistant" in item
-        )
-
-
-def _save_chat_history() -> None:
-    _ensure_storage_dirs()
-    with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(chat_history, f, ensure_ascii=False)
 
 
 def _chunk_count() -> int:
@@ -98,7 +69,6 @@ def _rebuild_document_index() -> dict:
 
 
 _ensure_storage_dirs()
-_load_chat_history()
 
 
 def _is_allowed_pdf(filename: str) -> bool:
@@ -168,15 +138,28 @@ def api_chat():
                 size = 0
             attachments.append({"filename": filename, "size": size})
 
+    raw_history = data.get("history", [])
+    conversation_history = []
+    if isinstance(raw_history, list):
+        for item in raw_history[-3:]:
+            if not isinstance(item, dict):
+                continue
+            previous_user = str(item.get("user", "")).strip()
+            previous_assistant = str(item.get("assistant", "")).strip()
+            if previous_user and previous_assistant:
+                conversation_history.append({
+                    "user": previous_user[:4000],
+                    "assistant": previous_assistant[:8000],
+                })
+
     try:
         reply = get_response(
             user_msg,
             db_dir=str(DB_DIR),
             source_filenames=[item["filename"] for item in attachments] or None,
+            conversation_history=conversation_history or None,
+            record_history=False,
         )
-        if attachments and chat_history:
-            chat_history[-1]["attachments"] = attachments
-        _save_chat_history()
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:
@@ -187,15 +170,14 @@ def api_chat():
 
 @app.route("/api/history", methods=["GET"])
 def api_history():
-    """Return the current conversation history."""
-    return jsonify({"history": chat_history})
+    """Return no server history; browser IndexedDB owns each user's chat."""
+    return jsonify({"history": []})
 
 
 @app.route("/api/clear", methods=["POST"])
 def api_clear():
-    """Clear the conversation history."""
+    """Clear compatibility-only in-memory history."""
     chat_history.clear()
-    _save_chat_history()
     return jsonify({"status": "cleared"})
 
 
@@ -336,7 +318,7 @@ def api_health():
         "stored_messages": len(chat_history),
         "storage_dir": str(STORAGE_DIR),
         "groq_configured": bool(os.environ.get("GROQ_API_KEY", "").strip()),
-        "groq_model": os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b"),
+        "groq_model": os.environ.get("GROQ_LOW_LATENCY_MODEL", "openai/gpt-oss-20b"),
     })
 
 

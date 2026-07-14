@@ -11,6 +11,8 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: qwen/qwen3.6-27b
+      - key: GROQ_LOW_LATENCY_MODEL
+        value: openai/gpt-oss-20b
       - key: APP_STORAGE_DIR
         value: /tmp/archive-ai
       - key: MAX_UPLOAD_MB

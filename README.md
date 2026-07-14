@@ -16,7 +16,9 @@ search, and generates answers through the Groq API.
 - Hybrid retrieval with dense FAISS search plus sparse BM25 search.
 - Reciprocal Rank Fusion (RRF) to combine dense and keyword rankings.
 - Cross-encoder re-ranking before context is sent to the LLM.
-- Stored chat history, including the PDFs associated with each chat turn.
+- Device-stored chat history, including PDFs associated with each chat turn.
+- Browser-device persistence with IndexedDB for chat turns and PDF blobs.
+- Automatic document restoration after a free-host restart or redeploy.
 - Source tracking when the index contains file/page metadata.
 - Groq API generation with configurable model via `GROQ_MODEL`.
 - General chat fallback before any PDFs are uploaded or indexed.
@@ -146,12 +148,12 @@ Then open `http://localhost:7860` in your browser.
 |---|---|---|---|
 | `GROQ_API_KEY` | Yes | none | Groq API key used for LLM generation |
 | `GROQ_MODEL` | No | `qwen/qwen3.6-27b` | Groq model ID |
+| `GROQ_LOW_LATENCY_MODEL` | No | `openai/gpt-oss-20b` | Preferred fast Groq model, with `GROQ_MODEL` as fallback |
 | `PORT` | No | `7860` | Flask server port |
 | `MAX_UPLOAD_MB` | No | `25` | Maximum PDF upload size in MB |
 | `APP_STORAGE_DIR` | No | `.` | Base directory for app storage |
 | `DATA_DIR` | No | `<APP_STORAGE_DIR>/data` | PDF upload storage directory |
 | `DB_DIR` | No | `<APP_STORAGE_DIR>/db` | FAISS/chunk storage directory |
-| `CHAT_HISTORY_FILE` | No | `<APP_STORAGE_DIR>/chat_history.json` | Stored chat history file |
 | `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | FastEmbed dense retrieval model |
 | `RERANKER_MODEL` | No | `Xenova/ms-marco-MiniLM-L-6-v2` | FastEmbed cross-encoder model |
 | `RAG_LOW_MEMORY_MODE` | No | `1` | Load embedding and reranking models sequentially for 512 MB hosting |
@@ -182,6 +184,9 @@ then starts Flask with Gunicorn on Render's assigned `PORT`.
 ## Notes
 
 - The LLM depends on Groq API for answer generation.
+- IndexedDB is used instead of server-side SQLite for temporary user-device
+  storage. This keeps each browser's chats and PDFs on that device; a SQLite
+  file inside the free Render container would be erased whenever it sleeps.
 - Retrieval uses local FAISS, BM25, quantized ONNX embeddings, and ONNX
   cross-encoder reranking; no retrieval API key or GPU is required.
 - If no FAISS index exists yet, the app still works as a general Groq-powered
