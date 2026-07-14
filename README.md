@@ -1,6 +1,5 @@
----
+Live link _ _ _   '''https://adi080122-local-rag-voice-ai-assistant.hf.space/'''
 title: RAG AI Assistant
-emoji: 🧠
 colorFrom: indigo
 colorTo: purple
 sdk: docker
