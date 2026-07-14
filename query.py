@@ -1,4 +1,5 @@
 from pathlib import Path
+import gc
 import json
 import os
 import re
@@ -64,6 +65,23 @@ def reset_rag_cache() -> None:
     _GLOBAL["bm25"] = None
 
 
+def _low_memory_mode() -> bool:
+    """Return whether inference models should be loaded one at a time."""
+    return os.environ.get("RAG_LOW_MEMORY_MODE", "1").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+def _release_model(cache_key: str) -> None:
+    """Release an ONNX session and promptly return its model memory."""
+    model = _GLOBAL.get(cache_key)
+    if model is None:
+        return
+    _GLOBAL[cache_key] = None
+    del model
+    gc.collect()
+
+
 def _tokenize(text: str) -> list[str]:
     """Simple whitespace + lowercase tokenizer for BM25."""
     return text.lower().split()
@@ -124,30 +142,25 @@ def _ensure_loaded(db_dir: str = "db"):
         tokenized_corpus = [_tokenize(c["text"]) for c in _GLOBAL["chunks"]]
         _GLOBAL["bm25"] = BM25Okapi(tokenized_corpus)
 
-    # --- Load cross-encoder for re-ranking ---
-    if _GLOBAL["cross_encoder"] is None:
-        reranker_model_name = os.environ.get(
-            "RERANKER_MODEL", _DEFAULT_RERANKER_MODEL
-        )
-        _GLOBAL["cross_encoder"] = TextCrossEncoder(
-            model_name=reranker_model_name,
-            threads=1,
-        )
-
-
 def _search_hybrid(query: str) -> list[int]:
     """Hybrid search combining dense (FAISS) and sparse (BM25) retrieval with RRF.
 
     Returns a list of chunk indices sorted by combined relevance.
     """
     # --- Dense search via FAISS ---
-    q_vec = np.asarray(
-        list(_GLOBAL["embedding_model"].query_embed(query)),
-        dtype="float32",
-    )
-    faiss.normalize_L2(q_vec)
-    dense_k = min(_DENSE_TOP_K, _GLOBAL["index"].ntotal)
-    _dense_scores, dense_indices = _GLOBAL["index"].search(q_vec, dense_k)
+    try:
+        q_vec = np.asarray(
+            list(_GLOBAL["embedding_model"].query_embed(query)),
+            dtype="float32",
+        )
+        faiss.normalize_L2(q_vec)
+        dense_k = min(_DENSE_TOP_K, _GLOBAL["index"].ntotal)
+        _dense_scores, dense_indices = _GLOBAL["index"].search(q_vec, dense_k)
+    finally:
+        # Render's free instance has 512 MB RAM. Release the embedding session
+        # before loading the reranker to avoid overlapping model memory.
+        if _low_memory_mode():
+            _release_model("embedding_model")
 
     # --- Sparse search via BM25 ---
     tokenized_query = _tokenize(query)
@@ -182,8 +195,21 @@ def _rerank(query: str, indices: list[int]) -> list[int]:
     chunks = _GLOBAL["chunks"]
     documents = [chunks[i]["text"] for i in indices]
 
-    # ONNX cross-encoder returns a relevance score per document.
-    scores = list(_GLOBAL["cross_encoder"].rerank(query, documents))
+    if _GLOBAL["cross_encoder"] is None:
+        reranker_model_name = os.environ.get(
+            "RERANKER_MODEL", _DEFAULT_RERANKER_MODEL
+        )
+        _GLOBAL["cross_encoder"] = TextCrossEncoder(
+            model_name=reranker_model_name,
+            threads=1,
+        )
+
+    try:
+        # ONNX cross-encoder returns a relevance score per document.
+        scores = list(_GLOBAL["cross_encoder"].rerank(query, documents))
+    finally:
+        if _low_memory_mode():
+            _release_model("cross_encoder")
 
     scored = list(zip(indices, scores))
     scored.sort(key=lambda x: x[1], reverse=True)

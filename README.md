@@ -152,6 +152,7 @@ Then open `http://localhost:7860` in your browser.
 | `CHAT_HISTORY_FILE` | No | `<APP_STORAGE_DIR>/chat_history.json` | Stored chat history file |
 | `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | FastEmbed dense retrieval model |
 | `RERANKER_MODEL` | No | `Xenova/ms-marco-MiniLM-L-6-v2` | FastEmbed cross-encoder model |
+| `RAG_LOW_MEMORY_MODE` | No | `1` | Load embedding and reranking models sequentially for 512 MB hosting |
 
 ## Deploy Free on Render
 
