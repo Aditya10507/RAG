@@ -19,3 +19,5 @@ services:
         value: BAAI/bge-small-en-v1.5
       - key: RERANKER_MODEL
         value: Xenova/ms-marco-MiniLM-L-6-v2
+      - key: RAG_LOW_MEMORY_MODE
+        value: "1"

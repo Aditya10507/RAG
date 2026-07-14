@@ -1,4 +1,5 @@
 from pathlib import Path
+import gc
 import os
 
 from pypdf import PdfReader
@@ -172,6 +173,11 @@ def ingest_pdf(data_dir: str = "data", db_dir: str = "db") -> None:
     dim = vectors.shape[1]
     index = faiss.IndexFlatIP(dim)
     index.add(vectors)
+
+    # Do not retain the ingestion session while the web process prepares to
+    # answer the message. This matters on 512 MB free hosting instances.
+    del embedding_model
+    gc.collect()
 
     db_path = Path(db_dir)
     db_path.mkdir(parents=True, exist_ok=True)

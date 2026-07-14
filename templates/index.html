@@ -618,13 +618,35 @@
       chatScroll.scrollTo({ top: chatScroll.scrollHeight, behavior: 'auto' });
     }
 
+    async function readApiResponse(response, fallbackMessage) {
+      const rawBody = await response.text();
+      let data = null;
+
+      if (rawBody) {
+        try { data = JSON.parse(rawBody); }
+        catch (_) { data = null; }
+      }
+
+      if (!response.ok) {
+        if (data?.error) throw new Error(data.error);
+        if ([502, 503, 504].includes(response.status)) {
+          throw new Error('The free service restarted while processing this request. Please wait a moment and try again.');
+        }
+        throw new Error(`${fallbackMessage} (HTTP ${response.status})`);
+      }
+
+      if (!data) {
+        throw new Error(`${fallbackMessage} The server returned an empty or invalid response.`);
+      }
+
+      return data;
+    }
+
     async function uploadAttachments(files) {
       const formData = new FormData();
       files.forEach((file) => formData.append('documents', file));
       const response = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Document upload failed.');
-      return data;
+      return readApiResponse(response, 'Document upload failed.');
     }
 
     async function sendMessage() {
@@ -662,8 +684,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: prompt, attachments: uploaded }),
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'The assistant could not complete the request.');
+        const data = await readApiResponse(response, 'The assistant could not complete the request.');
 
         hideProcessing();
         chatThread.appendChild(createMessage('assistant', data.reply));
@@ -683,7 +704,7 @@
 
     async function refreshDocuments() {
       const response = await fetch('/api/documents');
-      const data = await response.json();
+      const data = await readApiResponse(response, 'Could not load the document list.');
       const documents = data.documents || [];
       documentCount.textContent = documents.length;
       documentList.innerHTML = documents.length ? documents.map((document) => `
@@ -696,7 +717,7 @@
 
     async function refreshHealth() {
       const response = await fetch('/api/health');
-      const data = await response.json();
+      const data = await readApiResponse(response, 'Could not load workspace status.');
       indexStatus.textContent = data.index_ready ? 'Ready' : 'Not indexed';
       indexDot.className = `status-dot ${data.index_ready ? 'ready' : 'warning'}`;
       groqStatus.textContent = data.groq_configured ? 'Connected' : 'Not configured';
@@ -719,8 +740,7 @@
       showToast('Refreshing the document index…');
       try {
         const response = await fetch('/api/reindex', { method: 'POST' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Index refresh failed.');
+        const data = await readApiResponse(response, 'Index refresh failed.');
         showToast(`Index refreshed with ${data.chunks} searchable sections.`);
         await refreshSystemState();
       } catch (error) { showToast(error.message, 'error'); }
@@ -748,7 +768,7 @@
     async function loadHistory() {
       try {
         const response = await fetch('/api/history');
-        const data = await response.json();
+        const data = await readApiResponse(response, 'Could not load chat history.');
         const history = data.history || [];
         if (!history.length) return;
         document.getElementById('welcome')?.remove();
