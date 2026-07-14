@@ -13,6 +13,9 @@ WORKDIR $HOME/app
 
 # Copy requirements first for better Docker layer caching
 COPY --chown=user requirements.txt .
+# The Space runs on CPU hardware. Install the CPU wheel explicitly before
+# sentence-transformers so pip does not pull multi-gigabyte CUDA libraries.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.13.0+cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download the sentence-transformers and cross-encoder models so first request is fast
