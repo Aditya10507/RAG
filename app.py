@@ -11,12 +11,12 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from ingest import ingest_pdf
-from query import get_response, reset_rag_cache
+from query import get_response, reset_rag_cache, stream_response
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
@@ -119,26 +119,20 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/chat", methods=["POST"])
-def api_chat():
-    """Handle a chat message and return the assistant's response.
-
-    Expects JSON body: {"message": "user question"}
-    Returns JSON: {"reply": "assistant answer"}
-    """
+def _parse_chat_payload() -> tuple[str, list[dict], list[dict]]:
+    """Validate and normalize one browser chat request."""
     data = request.get_json(silent=True)
     if not data or "message" not in data:
-        return jsonify({"error": "Missing 'message' field"}), 400
+        raise ValueError("Missing 'message' field")
 
+    if not isinstance(data["message"], str):
+        raise ValueError("Message must be text")
     user_msg = data["message"].strip()
     if not user_msg:
-        return jsonify({"error": "Empty message"}), 400
+        raise ValueError("Empty message")
 
-    # Attachment metadata is supplied only after /api/upload has safely stored
-    # the files. Keep a small, display-only representation with the chat turn
-    # so documents remain visually associated with the message that used them.
-    raw_attachments = data.get("attachments", [])
     attachments = []
+    raw_attachments = data.get("attachments", [])
     if isinstance(raw_attachments, list):
         for item in raw_attachments[:10]:
             if not isinstance(item, dict):
@@ -152,8 +146,8 @@ def api_chat():
                 size = 0
             attachments.append({"filename": filename, "size": size})
 
-    raw_history = data.get("history", [])
     conversation_history = []
+    raw_history = data.get("history", [])
     if isinstance(raw_history, list):
         for item in raw_history[-3:]:
             if not isinstance(item, dict):
@@ -165,6 +159,26 @@ def api_chat():
                     "user": previous_user[:4000],
                     "assistant": previous_assistant[:8000],
                 })
+
+    return user_msg, attachments, conversation_history
+
+
+def _stream_event(event_type: str, **payload) -> str:
+    """Serialize one server-sent event for the browser chat stream."""
+    return f"data: {json.dumps({'type': event_type, **payload}, ensure_ascii=False)}\n\n"
+
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    """Handle a chat message and return the assistant's response.
+
+    Expects JSON body: {"message": "user question"}
+    Returns JSON: {"reply": "assistant answer"}
+    """
+    try:
+        user_msg, attachments, conversation_history = _parse_chat_payload()
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
     try:
         reply = get_response(
@@ -180,6 +194,43 @@ def api_chat():
         return jsonify({"error": f"Unexpected error: {e}"}), 500
 
     return jsonify({"reply": reply})
+
+
+@app.route("/api/chat/stream", methods=["POST"])
+def api_chat_stream():
+    """Stream a grounded assistant response as incremental server-sent events."""
+    try:
+        user_msg, attachments, conversation_history = _parse_chat_payload()
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    def generate():
+        yield _stream_event("start")
+        try:
+            for delta in stream_response(
+                user_msg,
+                db_dir=str(DB_DIR),
+                source_filenames=[item["filename"] for item in attachments] or None,
+                conversation_history=conversation_history or None,
+                record_history=False,
+            ):
+                yield _stream_event("delta", text=delta)
+        except RuntimeError as error:
+            yield _stream_event("error", message=str(error))
+            return
+        except Exception as error:
+            yield _stream_event("error", message=f"Unexpected error: {error}")
+            return
+        yield _stream_event("done")
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.route("/api/upload", methods=["POST"])
