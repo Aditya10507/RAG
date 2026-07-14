@@ -21,9 +21,6 @@
       --line-dark: #d0d7e2;
       --accent: #245bdb;
       --accent-dark: #1d4fc2;
-      --success: #18794e;
-      --warning: #a15c00;
-      --danger: #b42318;
       --radius: 10px;
       --font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -317,7 +314,7 @@
     .message-attachments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
     .message-file {
       display: grid;
-      grid-template-columns: 34px minmax(0, 1fr) auto;
+      grid-template-columns: 34px minmax(0, 1fr);
       gap: 9px;
       align-items: center;
       min-height: 56px;
@@ -330,15 +327,28 @@
     .message-file-icon svg { width: 17px; height: 17px; }
     .message-file-name { overflow: hidden; color: #344054; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
     .message-file-meta { margin-top: 2px; color: var(--muted); font-size: 10px; }
-    .file-state { color: var(--success); font-size: 10px; font-weight: 700; }
-    .file-state.uploading { color: var(--warning); }
-    .file-state.failed { color: var(--danger); }
-
     .message-actions { margin-top: 9px; }
     .copy-button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; background: transparent; color: var(--muted-light); cursor: pointer; font-size: 10px; }
     .copy-button:hover { color: #475467; }
 
-    .processing { color: var(--muted); font-size: 13px; line-height: 24px; }
+    .processing { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; }
+    .processing-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #667085;
+      animation: assistant-thinking 1.2s ease-in-out infinite;
+    }
+    .processing-dot:nth-child(2) { animation-delay: .15s; }
+    .processing-dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes assistant-thinking {
+      0%, 70%, 100% { opacity: .28; transform: translateY(0); }
+      35% { opacity: 1; transform: translateY(-2px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .processing-dot { animation: none; opacity: .65; }
+    }
 
     .composer-area { padding: 12px 28px 20px; border-top: 1px solid var(--line); background: #fff; }
     .composer-shell { width: min(820px, 100%); margin: 0 auto; border: 1px solid var(--line-dark); border-radius: var(--radius); background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.07); }
@@ -712,49 +722,43 @@
       });
     }
 
-    function attachmentCards(attachments, state = 'ready') {
+    function attachmentCards(attachments) {
       if (!attachments || !attachments.length) return '';
-      const stateLabel = state === 'uploading' ? 'Indexing' : state === 'failed' ? 'Failed' : 'Ready';
       return `<div class="message-attachments">${attachments.map((file) => `
         <div class="message-file">
           <div class="message-file-icon">${fileIcon}</div>
           <div><div class="message-file-name" title="${escapeHtml(file.filename || file.name)}">${escapeHtml(file.filename || file.name)}</div><div class="message-file-meta">PDF · ${formatBytes(file.size)}</div></div>
-          <span class="file-state ${state}">${stateLabel}</span>
         </div>`).join('')}</div>`;
     }
 
-    function createMessage(role, text, attachments = [], attachmentState = 'ready') {
+    function createMessage(role, text, attachments = []) {
       const element = document.createElement('article');
       element.className = `message ${role}`;
+      element.dataset.rawText = text || '';
       const isUser = role === 'user';
       element.innerHTML = `
         <div class="message-avatar">${isUser ? 'YOU' : 'AI'}</div>
         <div class="message-content">
           <div class="message-heading">${isUser ? 'You' : 'Archive AI'}</div>
           <div class="message-text">${isUser ? escapeHtml(text) : renderMarkdown(text)}</div>
-          ${attachmentCards(attachments, attachmentState)}
+          ${attachmentCards(attachments)}
           <div class="message-actions"><button class="copy-button">Copy response</button></div>
         </div>`;
       element.querySelector('.copy-button').addEventListener('click', async (event) => {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(element.dataset.rawText || '');
         event.currentTarget.textContent = 'Copied';
         setTimeout(() => { event.currentTarget.textContent = 'Copy response'; }, 1200);
       });
       return element;
     }
 
-    function showProcessing(label) {
+    function showProcessing() {
       const element = document.createElement('article');
       element.className = 'message assistant';
       element.id = 'processing-message';
-      element.innerHTML = `<div class="message-avatar">AI</div><div class="message-content"><div class="message-heading">Archive AI</div><div class="processing">${escapeHtml(label)}</div></div>`;
+      element.innerHTML = `<div class="message-avatar">AI</div><div class="message-content"><div class="message-heading">Archive AI</div><div class="processing" role="status" aria-label="Archive AI is working"><span class="processing-dot"></span><span class="processing-dot"></span><span class="processing-dot"></span></div></div>`;
       chatThread.appendChild(element);
       scrollToBottom();
-    }
-
-    function updateProcessing(label) {
-      const processing = document.querySelector('#processing-message .processing');
-      if (processing) processing.textContent = label;
     }
 
     function hideProcessing() {
@@ -789,6 +793,122 @@
       return data;
     }
 
+    async function requestAssistantStream(payload, onDelta) {
+      const response = await fetch(apiUrl('/api/chat/stream'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.status === 404 || !response.body) {
+        const fallback = await fetch(apiUrl('/api/chat'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await readApiResponse(fallback, 'The assistant could not complete the request.');
+        onDelta(data.reply);
+        return data.reply;
+      }
+
+      if (!response.ok) {
+        await readApiResponse(response, 'The assistant could not start the response stream.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let completeAnswer = '';
+
+      const processFrame = (frame) => {
+        const dataLines = frame.split('\n')
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trimStart());
+        if (!dataLines.length) return;
+
+        let event;
+        try { event = JSON.parse(dataLines.join('\n')); }
+        catch (_) { throw new Error('The response stream returned invalid data.'); }
+
+        if (event.type === 'delta' && event.text) {
+          completeAnswer += event.text;
+          onDelta(event.text);
+        } else if (event.type === 'error') {
+          throw new Error(event.message || 'The response stream stopped unexpectedly.');
+        }
+      };
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          const frames = buffer.split('\n\n');
+          buffer = frames.pop() || '';
+          frames.forEach(processFrame);
+          if (done) break;
+        }
+        if (buffer.trim()) processFrame(buffer);
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (!completeAnswer) throw new Error('The assistant returned an empty response.');
+      return completeAnswer;
+    }
+
+    function createTypewriter(messageElement) {
+      const textElement = messageElement.querySelector('.message-text');
+      let displayedText = '';
+      let pendingText = '';
+      let finished = false;
+      let cancelled = false;
+      let timer = null;
+      let resolveFinished;
+      const finishedPromise = new Promise((resolve) => { resolveFinished = resolve; });
+
+      const renderNext = () => {
+        timer = null;
+        if (cancelled) return;
+
+        if (pendingText) {
+          const backlog = pendingText.length;
+          const characterCount = backlog > 1000 ? 32 : backlog > 400 ? 16 : backlog > 120 ? 8 : backlog > 40 ? 4 : 2;
+          displayedText += pendingText.slice(0, characterCount);
+          pendingText = pendingText.slice(characterCount);
+          messageElement.dataset.rawText = displayedText;
+          textElement.innerHTML = renderMarkdown(displayedText);
+          scrollToBottom();
+        }
+
+        if (finished && !pendingText) {
+          resolveFinished(displayedText);
+          return;
+        }
+        if (pendingText) timer = setTimeout(renderNext, 18);
+      };
+
+      const schedule = () => {
+        if (!timer && !cancelled) timer = setTimeout(renderNext, 0);
+      };
+
+      return {
+        append(text) {
+          pendingText += text;
+          schedule();
+        },
+        finish() {
+          finished = true;
+          schedule();
+          return finishedPromise;
+        },
+        cancel() {
+          cancelled = true;
+          if (timer) clearTimeout(timer);
+          resolveFinished(displayedText);
+        },
+      };
+    }
+
     async function uploadAttachments(files) {
       const formData = new FormData();
       files.forEach((file) => formData.append('documents', file));
@@ -804,7 +924,7 @@
 
       const prompt = typedText || 'Please review the attached document and summarize its key information.';
       document.getElementById('welcome')?.remove();
-      const userMessage = createMessage('user', prompt, files, files.length ? 'uploading' : 'ready');
+      const userMessage = createMessage('user', prompt, files);
       chatThread.appendChild(userMessage);
 
       stagedFiles = [];
@@ -813,7 +933,10 @@
       renderStagedFiles();
       isBusy = true;
       updateSendState();
-      showProcessing(files.length ? 'Securely uploading and indexing your documents…' : 'Reviewing your question…');
+      showProcessing();
+
+      let assistantMessage = null;
+      let typewriter = null;
 
       try {
         let uploaded = [];
@@ -822,26 +945,33 @@
           uploaded = uploadResult.uploaded || [];
           try { await cacheUploadedDocuments(files, uploaded); } catch (_) {}
           const cards = userMessage.querySelector('.message-attachments');
-          if (cards) cards.outerHTML = attachmentCards(uploaded, 'ready');
-          updateProcessing('Searching your document workspace…');
+          if (cards) cards.outerHTML = attachmentCards(uploaded);
           await refreshSystemState();
         }
 
         let recentHistory = [];
         try { recentHistory = (await getDeviceMessages()).slice(-3); } catch (_) {}
-        const response = await fetch(apiUrl('/api/chat'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: prompt, attachments: uploaded, history: recentHistory }),
+        const reply = await requestAssistantStream({
+          message: prompt,
+          attachments: uploaded,
+          history: recentHistory,
+        }, (delta) => {
+          if (!assistantMessage) {
+            hideProcessing();
+            assistantMessage = createMessage('assistant', '');
+            chatThread.appendChild(assistantMessage);
+            typewriter = createTypewriter(assistantMessage);
+          }
+          typewriter.append(delta);
         });
-        const data = await readApiResponse(response, 'The assistant could not complete the request.');
 
         hideProcessing();
-        chatThread.appendChild(createMessage('assistant', data.reply));
+        await typewriter.finish();
+        assistantMessage.dataset.rawText = reply;
         try {
           await deviceAdd('messages', {
             user: prompt,
-            assistant: data.reply,
+            assistant: reply,
             attachments: uploaded,
             createdAt: Date.now(),
           });
@@ -849,7 +979,8 @@
         scrollToBottom();
       } catch (error) {
         hideProcessing();
-        userMessage.querySelectorAll('.file-state').forEach((state) => { state.className = 'file-state failed'; state.textContent = 'Failed'; });
+        typewriter?.cancel();
+        assistantMessage?.remove();
         chatThread.appendChild(createMessage('assistant', `I could not complete this request. ${error.message}`));
         showToast(error.message, 'error');
         scrollToBottom();

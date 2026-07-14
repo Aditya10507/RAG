@@ -30,6 +30,8 @@ The Vercel frontend remains available while the API wakes up.
 - Added document deletion with automatic index rebuilding.
 - Moved per-browser chat history and PDF recovery data to IndexedDB.
 - Added automatic PDF restoration after an ephemeral backend restart.
+- Added real Groq token streaming with smooth progressive answer rendering.
+- Replaced upload/retrieval status text with a compact assistant dot indicator.
 - Reduced response latency with a compact FastEmbed/FAISS pipeline and a
   low-latency Groq model preference.
 - Split deployment: static frontend on Vercel and the RAG API on Render.
@@ -45,6 +47,7 @@ The Vercel frontend remains available while the API wakes up.
 - Cross-encoder re-ranking for multi-document searches.
 - Direct document summaries with broader source coverage.
 - Groq generation with a preferred fast model and configurable fallback.
+- Real-time Server-Sent Event (SSE) answers with a non-streaming fallback.
 - Grounded answers with source filename and page citations.
 - Browser-local chat and PDF persistence through IndexedDB.
 - Automatic document recovery when Render's ephemeral storage resets.
@@ -57,7 +60,7 @@ Browser / Vercel
   ├─ Professional chat interface
   ├─ Message-bound PDF attachments
   └─ IndexedDB: chat turns + recoverable PDF blobs
-              │ HTTPS / JSON / multipart PDF
+              │ HTTPS / JSON / multipart PDF / SSE stream
               ▼
 Flask API / Render
   ├─ PDF validation and temporary storage
@@ -221,6 +224,7 @@ Python backend are never included in a frontend CLI upload.
 | `GET` | `/api/documents` | List indexed PDFs |
 | `POST` | `/api/upload` | Upload PDFs and rebuild the index |
 | `POST` | `/api/chat` | Answer with optional attachment scope/history |
+| `POST` | `/api/chat/stream` | Stream answer deltas as Server-Sent Events |
 | `POST` | `/api/reindex` | Rebuild document memory manually |
 | `DELETE` | `/api/documents/<filename>` | Delete a PDF and rebuild the index |
 

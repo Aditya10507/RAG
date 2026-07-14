@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from pathlib import Path
 import gc
 import json
@@ -294,8 +295,8 @@ def _build_general_prompt(
     return prompt
 
 
-def _generate_with_groq(prompt: str) -> str:
-    """Generate a response using the Groq API."""
+def _groq_client_and_models():
+    """Create a Groq client and return models in preferred fallback order."""
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(
@@ -311,35 +312,52 @@ def _generate_with_groq(prompt: str) -> str:
 
     from groq import Groq
 
-    client = Groq(api_key=api_key)
+    return Groq(api_key=api_key), model_candidates
+
+
+def _completion_request(prompt: str, model: str, *, stream: bool = False) -> dict:
+    """Build one Groq completion request with model-specific reasoning settings."""
+    request = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_completion_tokens": 700,
+        "temperature": 0.2,
+        "stream": stream,
+    }
+    if model.startswith("qwen/"):
+        request["reasoning_format"] = "hidden"
+        request["reasoning_effort"] = "none"
+    elif model.startswith("openai/gpt-oss"):
+        request["reasoning_format"] = "hidden"
+        request["reasoning_effort"] = "low"
+    return request
+
+
+def _model_is_unavailable(error: Exception) -> bool:
+    """Return whether generation can safely fall back to another configured model."""
+    error_text = str(error).lower()
+    return any(marker in error_text for marker in (
+        "blocked at the project level",
+        "model_permission_blocked_project",
+        "model_not_found",
+        "does not exist",
+        "permission",
+    ))
+
+
+def _generate_with_groq(prompt: str) -> str:
+    """Generate one complete response using the Groq API."""
+    client, model_candidates = _groq_client_and_models()
     last_error = None
     for position, model in enumerate(model_candidates):
-        request_kwargs = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 700,
-            "temperature": 0.2,
-        }
-        if model.startswith("qwen/"):
-            request_kwargs["reasoning_format"] = "hidden"
-            request_kwargs["reasoning_effort"] = "none"
-        elif model.startswith("openai/gpt-oss"):
-            request_kwargs["reasoning_format"] = "hidden"
-            request_kwargs["reasoning_effort"] = "low"
-
         try:
-            completion = client.chat.completions.create(**request_kwargs)
+            completion = client.chat.completions.create(
+                **_completion_request(prompt, model)
+            )
             return _clean_model_answer(completion.choices[0].message.content)
         except Exception as e:
             last_error = e
-            error_text = str(e).lower()
-            model_unavailable = any(marker in error_text for marker in (
-                "blocked at the project level",
-                "model_permission_blocked_project",
-                "model_not_found",
-                "does not exist",
-                "permission",
-            ))
+            model_unavailable = _model_is_unavailable(e)
             if position < len(model_candidates) - 1 and model_unavailable:
                 continue
             if model_unavailable:
@@ -352,35 +370,52 @@ def _generate_with_groq(prompt: str) -> str:
     raise RuntimeError(f"Groq generation failed: {last_error}")
 
 
-def get_response(
+def _stream_with_groq(prompt: str) -> Iterator[str]:
+    """Yield Groq response deltas as soon as the model produces them."""
+    client, model_candidates = _groq_client_and_models()
+    last_error = None
+
+    for position, model in enumerate(model_candidates):
+        emitted_text = False
+        try:
+            completion = client.chat.completions.create(
+                **_completion_request(prompt, model, stream=True)
+            )
+            for chunk in completion:
+                delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    emitted_text = True
+                    yield delta
+            if not emitted_text:
+                raise RuntimeError("Groq returned an empty response.")
+            return
+        except Exception as e:
+            last_error = e
+            model_unavailable = _model_is_unavailable(e)
+            if not emitted_text and position < len(model_candidates) - 1 and model_unavailable:
+                continue
+            if model_unavailable:
+                raise RuntimeError(
+                    f"Groq model '{model}' is unavailable for this project. "
+                    "Enable it in Groq model permissions or configure another model."
+                ) from e
+            raise
+
+    raise RuntimeError(f"Groq generation failed: {last_error}")
+
+
+def _prepare_response(
     user_query: str,
     db_dir: str = "db",
     k: int = 5,
     source_filenames: list[str] | None = None,
     conversation_history: list[dict] | None = None,
-    record_history: bool = True,
-) -> str:
-    """Answer a question using the full RAG pipeline: hybrid search → re-rank → generate.
-
-    Pipeline:
-    1. Hybrid retrieval (FAISS dense + BM25 sparse) with RRF fusion
-    2. Cross-encoder re-ranking of top results
-    3. Context assembly with source metadata
-    4. LLM generation via the Groq API
-
-    Returns the assistant's answer as a string. CLI callers can retain the
-    interaction in the in-memory `chat_history`; the web UI stores history in
-    browser IndexedDB and disables server-side recording.
-    """
+):
+    """Prepare a grounded prompt and its ordered source labels."""
     try:
         _ensure_loaded(db_dir)
     except FileNotFoundError:
-        prompt = _build_general_prompt(user_query, conversation_history)
-        answer = _generate_with_groq(prompt)
-        final_answer = str(answer) if answer is not None else "I'm sorry, I couldn't generate a response."
-        if record_history:
-            chat_history.append({"user": user_query, "assistant": final_answer})
-        return final_answer
+        return _build_general_prompt(user_query, conversation_history), []
 
     chunks = _GLOBAL["chunks"]
 
@@ -410,27 +445,19 @@ def get_response(
     single_document_search = len(searchable_sources) == 1
 
     if single_document_search and summary_request:
-        # A summary needs broad document coverage, not only the most query-like chunks.
         summary_indices = allowed_indices if allowed_indices is not None else list(range(len(chunks)))
         reranked_indices = summary_indices[:12]
     else:
-        # Step 1: Hybrid search (FAISS + BM25 with RRF)
         hybrid_indices = _search_hybrid(user_query, allowed_indices=allowed_indices)
-
-        # Loading a cross-encoder for candidates from one already-scoped file adds
-        # substantial latency on free hosting without improving source selection.
         reranked_indices = (
             hybrid_indices
             if single_document_search
             else _rerank(user_query, hybrid_indices)
         )
 
-    # Step 3: Summaries benefit from broader ordered coverage of the file.
     result_limit = 10 if single_document_search and summary_request else k
-    top_indices = reranked_indices[:result_limit]
+    retrieved = [chunks[i] for i in reranked_indices[:result_limit]]
 
-    # Step 4: Build context with source tracking
-    retrieved = [chunks[i] for i in top_indices]
     context_parts = []
     all_sources = []
     for chunk in retrieved:
@@ -441,36 +468,92 @@ def get_response(
             if meta.get("page"):
                 source_label += f", Page {meta['page']}"
             source_label += "]"
-            loc = f" (p. {meta['page']})" if meta.get("page") else ""
-            all_sources.append(f"{meta['source']}{loc}")
+            location = f" (p. {meta['page']})" if meta.get("page") else ""
+            all_sources.append(f"{meta['source']}{location}")
 
-        if source_label:
-            context_parts.append(f"{source_label}\n{chunk['text']}")
-        else:
-            context_parts.append(chunk["text"])
+        context_parts.append(
+            f"{source_label}\n{chunk['text']}" if source_label else chunk["text"]
+        )
 
-    context = "\n\n".join(context_parts)
-
-    # Step 5: Build prompt and generate
     prompt = _build_prompt(
         user_query,
-        context,
+        "\n\n".join(context_parts),
         attached_sources=source_filenames,
         conversation_history=conversation_history,
     )
+    return prompt, list(dict.fromkeys(all_sources))
 
+
+def _source_footer(sources: list[str]) -> str:
+    """Format ordered, de-duplicated source labels for the final answer."""
+    return f"\n\n---\n*Sources: {', '.join(sources)}*" if sources else ""
+
+
+def get_response(
+    user_query: str,
+    db_dir: str = "db",
+    k: int = 5,
+    source_filenames: list[str] | None = None,
+    conversation_history: list[dict] | None = None,
+    record_history: bool = True,
+) -> str:
+    """Answer a question using the full RAG pipeline: hybrid search → re-rank → generate.
+
+    Pipeline:
+    1. Hybrid retrieval (FAISS dense + BM25 sparse) with RRF fusion
+    2. Cross-encoder re-ranking of top results
+    3. Context assembly with source metadata
+    4. LLM generation via the Groq API
+
+    Returns the assistant's answer as a string. CLI callers can retain the
+    interaction in the in-memory `chat_history`; the web UI stores history in
+    browser IndexedDB and disables server-side recording.
+    """
+    prompt, sources = _prepare_response(
+        user_query,
+        db_dir=db_dir,
+        k=k,
+        source_filenames=source_filenames,
+        conversation_history=conversation_history,
+    )
     answer = _generate_with_groq(prompt)
-
     final_answer = str(answer) if answer is not None else "I'm sorry, I couldn't generate a response."
-
-    # Append source references for transparency
-    unique_sources = list(dict.fromkeys(all_sources))  # preserve order, deduplicate
-    if unique_sources and len(final_answer) > 0:
-        final_answer += f"\n\n---\n*Sources: {', '.join(unique_sources)}*"
+    final_answer += _source_footer(sources)
 
     if record_history:
         chat_history.append({"user": user_query, "assistant": final_answer})
     return final_answer
+
+
+def stream_response(
+    user_query: str,
+    db_dir: str = "db",
+    k: int = 5,
+    source_filenames: list[str] | None = None,
+    conversation_history: list[dict] | None = None,
+    record_history: bool = True,
+) -> Iterator[str]:
+    """Yield a grounded answer incrementally, followed by its source footer."""
+    prompt, sources = _prepare_response(
+        user_query,
+        db_dir=db_dir,
+        k=k,
+        source_filenames=source_filenames,
+        conversation_history=conversation_history,
+    )
+
+    parts = []
+    for delta in _stream_with_groq(prompt):
+        parts.append(delta)
+        yield delta
+
+    footer = _source_footer(sources)
+    if footer:
+        parts.append(footer)
+        yield footer
+
+    if record_history:
+        chat_history.append({"user": user_query, "assistant": "".join(parts)})
 
 
 def query_db(db_dir: str = "db") -> None:
