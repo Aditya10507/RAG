@@ -11,3 +11,10 @@ sample.pdf
 dist/
 .vercel/
 node_modules/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.DS_Store
+Thumbs.db

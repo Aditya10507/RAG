@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Create non-root user with UID 1000 (required by HF Spaces)
+# Run the application as a non-root user in production.
 RUN useradd -m -u 1000 user
 
 # Set environment variables

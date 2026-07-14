@@ -1,213 +1,238 @@
-# Personal AI Assistant (RAG + Groq API)
+# Archive AI — RAG Document Assistant
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Aditya10507/RAG)
+[![Live frontend](https://img.shields.io/badge/Live-Vercel-000000?logo=vercel)](https://archive-ai-rag.vercel.app)
+[![API health](https://img.shields.io/badge/API-Render-46E3B7?logo=render)](https://rag-t7t1.onrender.com/api/health)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
-An AI-powered personal assistant built with a Retrieval-Augmented Generation
-(RAG) pipeline. It reads your PDFs, retrieves relevant context with hybrid
-search, and generates answers through the Groq API.
+Archive AI is a production-deployed Retrieval-Augmented Generation (RAG)
+assistant for PDF documents. Users attach PDFs directly to a chat message, the
+backend indexes their contents, and Groq generates grounded answers with source
+file and page citations.
+
+## Live Project
+
+| Resource | Link |
+|---|---|
+| Production frontend | [archive-ai-rag.vercel.app](https://archive-ai-rag.vercel.app) |
+| Render backend | [rag-t7t1.onrender.com](https://rag-t7t1.onrender.com) |
+| API health check | [rag-t7t1.onrender.com/api/health](https://rag-t7t1.onrender.com/api/health) |
+| GitHub repository | [github.com/Aditya10507/RAG](https://github.com/Aditya10507/RAG) |
+
+The Render free service may need a short cold-start period after inactivity.
+The Vercel frontend remains available while the API wakes up.
+
+## Latest Updates
+
+- Rebuilt the interface as a professional, responsive document workspace.
+- Added PDF attachment cards to the exact user message that submitted them.
+- Added an expandable/collapsible desktop sidebar and mobile layout.
+- Scoped retrieval to the documents attached to each message.
+- Added document deletion with automatic index rebuilding.
+- Moved per-browser chat history and PDF recovery data to IndexedDB.
+- Added automatic PDF restoration after an ephemeral backend restart.
+- Reduced response latency with a compact FastEmbed/FAISS pipeline and a
+  low-latency Groq model preference.
+- Split deployment: static frontend on Vercel and the RAG API on Render.
+- Added production CORS rules, deployment ignore files, and secret-safe builds.
+- Removed obsolete server-history endpoints, duplicate environment loading, and
+  unreachable legacy index compatibility code.
 
 ## Features
 
-- Document understanding from PDFs with recursive semantic chunking.
-- Message-bound PDF attachments from the chat composer into app storage.
-- Attachment-scoped retrieval so a question uses the PDFs attached to that message.
-- Automatic document indexing after PDF upload.
-- Safe document removal with automatic reindexing of the remaining workspace.
-- Hybrid retrieval with dense FAISS search plus sparse BM25 search.
-- Reciprocal Rank Fusion (RRF) to combine dense and keyword rankings.
-- Cross-encoder re-ranking before context is sent to the LLM.
-- Device-stored chat history, including PDFs associated with each chat turn.
-- Browser-device persistence with IndexedDB for chat turns and PDF blobs.
-- Automatic document restoration after a free-host restart or redeploy.
-- Source tracking when the index contains file/page metadata.
-- Groq API generation with configurable model via `GROQ_MODEL`.
-- General chat fallback before any PDFs are uploaded or indexed.
-- Configurable storage paths for PDFs, document memory, and chat history.
+- Multiple PDF uploads from the chat composer.
+- Recursive semantic chunking with page-level metadata.
+- Dense FAISS and sparse BM25 retrieval combined with Reciprocal Rank Fusion.
+- Cross-encoder re-ranking for multi-document searches.
+- Direct document summaries with broader source coverage.
+- Groq generation with a preferred fast model and configurable fallback.
+- Grounded answers with source filename and page citations.
+- Browser-local chat and PDF persistence through IndexedDB.
+- Automatic document recovery when Render's ephemeral storage resets.
+- Responsive, accessible, non-animated interface.
+
+## Architecture
+
+```text
+Browser / Vercel
+  ├─ Professional chat interface
+  ├─ Message-bound PDF attachments
+  └─ IndexedDB: chat turns + recoverable PDF blobs
+              │ HTTPS / JSON / multipart PDF
+              ▼
+Flask API / Render
+  ├─ PDF validation and temporary storage
+  ├─ pypdf extraction and semantic chunking
+  ├─ FastEmbed ONNX embeddings
+  ├─ FAISS dense search + BM25 sparse search
+  ├─ Reciprocal Rank Fusion + cross-encoder re-ranking
+  └─ Groq generation
+              │
+              ▼
+Grounded answer + source citations
+```
+
+The Groq key and all model calls remain on Render. Vercel receives only the
+static HTML/CSS/JavaScript frontend. IndexedDB is used instead of SQLite for
+temporary user data because it keeps each visitor's chats and PDF recovery
+blobs on their own device; a SQLite file on a free ephemeral container would
+be shared and removed during restarts.
 
 ## Tech Stack
 
-| Component | Technology |
+| Layer | Technology |
 |---|---|
-| Language | Python |
-| LLM | Groq API, default `qwen/qwen3.6-27b` |
+| Frontend | HTML5, CSS3, vanilla JavaScript |
+| Device storage | IndexedDB |
+| Backend | Python 3.11, Flask, Gunicorn |
+| PDF extraction | pypdf |
 | Embeddings | FastEmbed ONNX (`BAAI/bge-small-en-v1.5`) |
-| Sparse Retrieval | BM25 (`rank-bm25`) |
-| Dense Retrieval | FAISS |
-| Re-Ranking | FastEmbed ONNX Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) |
-| Fusion Strategy | Reciprocal Rank Fusion (RRF) |
-| Web Framework | Flask + Gunicorn |
-
-## RAG Pipeline
-
-```text
-User Query
-  -> Hybrid Retrieval
-     -> Dense FAISS semantic search
-     -> Sparse BM25 keyword search
-     -> RRF fusion
-  -> Cross-Encoder Re-Ranking
-  -> Context Assembly with source metadata
-  -> Groq API Generation
-  -> Answer + source citations
-```
+| Dense retrieval | FAISS cosine similarity |
+| Sparse retrieval | BM25 (`rank-bm25`) |
+| Fusion | Reciprocal Rank Fusion |
+| Re-ranking | FastEmbed cross-encoder (`ms-marco-MiniLM-L-6-v2`) |
+| LLM | Groq API |
+| Hosting | Vercel frontend + Render backend |
 
 ## Project Structure
 
 ```text
 rag-assistant/
-|-- app.py              # Flask web server
-|-- query.py            # RAG pipeline and Groq generation
-|-- ingest.py           # PDF processing, chunking, embeddings, FAISS index
-|-- templates/
-|   `-- index.html      # Chat UI
-|-- Dockerfile          # CPU-only production container definition
-|-- entrypoint.sh       # Container startup script
-|-- render.yaml         # Free Render Blueprint
-|-- requirements.txt
-|-- .env.example
-`-- README.md
+├── app.py                       # Flask routes, uploads, CORS, health checks
+├── ingest.py                    # PDF extraction, chunking, embeddings, FAISS
+├── query.py                     # Retrieval, re-ranking, prompts, Groq calls
+├── templates/
+│   └── index.html               # Complete responsive chat frontend
+├── scripts/
+│   └── build-frontend.mjs       # Creates the static Vercel build in dist/
+├── Dockerfile                   # Production backend image
+├── entrypoint.sh                # Storage setup and Gunicorn startup
+├── render.yaml                  # Render Blueprint
+├── vercel.json                  # Static frontend build configuration
+├── package.json                 # Frontend build command
+├── requirements.txt             # Python dependencies
+├── .env.example                 # Safe environment template
+├── .dockerignore                # Minimal backend build context
+├── .vercelignore                # Prevents backend/private files from upload
+└── README.md
 ```
 
-## Setup
+Generated and private content is intentionally excluded from Git:
 
-### 1. Create a virtual environment
+- `.env` — local secrets.
+- `data/` — uploaded PDFs.
+- `db/` — generated FAISS index, chunks, and manifest.
+- `dist/` — generated Vercel frontend.
+- `.vercel/`, virtual environments, caches, and bytecode.
+
+## Local Setup
+
+Requirements: Python 3.11+, Node.js 20+, and a Groq API key.
 
 ```bash
+git clone https://github.com/Aditya10507/RAG.git
+cd RAG
 python -m venv venv
 ```
 
-Windows:
+Activate the environment:
 
-```bash
-venv\Scripts\activate
+```powershell
+# Windows PowerShell
+venv\Scripts\Activate.ps1
 ```
 
-macOS/Linux:
-
 ```bash
+# macOS/Linux
 source venv/bin/activate
 ```
 
-### 2. Install dependencies
+Install dependencies and create the local environment file:
 
 ```bash
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-### 3. Configure Groq
-
-Create a `.env` file from `.env.example` and add your Groq API key:
-
-```bash
-GROQ_API_KEY=your-groq-api-key
-GROQ_MODEL=qwen/qwen3.6-27b
-PORT=7860
-```
-
-You can get a Groq API key from the Groq Console.
-
-### 4. Chat and add documents
-
-You can chat immediately, even before uploading PDFs.
-
-You can add PDFs in either of these ways:
-
-- Start the app and attach PDFs from the message composer. Selected files are
-  shown on the outgoing message, indexed, and then used to answer that message.
-- Manually create a `data/` directory and place PDF files inside it.
-
-Uploaded files are saved to app storage and indexed automatically. Once upload
-finishes, you can ask questions about those documents in the same chat.
-
-### 5. Refresh document memory
-
-Manual refresh is normally not needed after UI uploads, because the app indexes
-PDFs automatically. Use the refresh memory button only after manually changing
-files in the storage folder.
-
-You can also run the same ingestion process manually:
-
-```bash
-python ingest.py
-```
-
-This chunks your PDFs, generates embeddings, and builds the FAISS index in the
-configured `DB_DIR`.
-
-### 6. Run the assistant
+On Windows without `cp`, use `Copy-Item .env.example .env`. Replace the
+placeholder in `.env` with your Groq API key, then start the application:
 
 ```bash
 python app.py
 ```
 
-Then open `http://localhost:7860` in your browser.
+Open `http://localhost:7860`. PDFs uploaded through the UI are indexed
+automatically. To index PDFs placed manually in `data/`, run `python ingest.py`.
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
+| Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `GROQ_API_KEY` | Yes | none | Groq API key used for LLM generation |
-| `GROQ_MODEL` | No | `qwen/qwen3.6-27b` | Groq model ID |
-| `GROQ_LOW_LATENCY_MODEL` | No | `openai/gpt-oss-20b` | Preferred fast Groq model, with `GROQ_MODEL` as fallback |
-| `PORT` | No | `7860` | Flask server port |
-| `MAX_UPLOAD_MB` | No | `25` | Maximum PDF upload size in MB |
-| `APP_STORAGE_DIR` | No | `.` | Base directory for app storage |
-| `DATA_DIR` | No | `<APP_STORAGE_DIR>/data` | PDF upload storage directory |
-| `DB_DIR` | No | `<APP_STORAGE_DIR>/db` | FAISS/chunk storage directory |
-| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | FastEmbed dense retrieval model |
-| `RERANKER_MODEL` | No | `Xenova/ms-marco-MiniLM-L-6-v2` | FastEmbed cross-encoder model |
-| `RAG_LOW_MEMORY_MODE` | No | `1` | Load embedding and reranking models sequentially for 512 MB hosting |
-| `FRONTEND_ORIGINS` | No | none | Extra comma-separated browser origins allowed to call the API |
+| `GROQ_API_KEY` | Yes | — | Server-side Groq credential |
+| `GROQ_LOW_LATENCY_MODEL` | No | `openai/gpt-oss-20b` | Preferred fast model |
+| `GROQ_MODEL` | No | `qwen/qwen3.6-27b` | Fallback model |
+| `PORT` | No | `7860` | Local/server HTTP port |
+| `MAX_UPLOAD_MB` | No | `25` | Maximum request size |
+| `APP_STORAGE_DIR` | No | `.` | Base runtime storage directory |
+| `DATA_DIR` | No | `<APP_STORAGE_DIR>/data` | Uploaded PDF directory |
+| `DB_DIR` | No | `<APP_STORAGE_DIR>/db` | Generated retrieval index directory |
+| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | FastEmbed embedding model |
+| `RERANKER_MODEL` | No | `Xenova/ms-marco-MiniLM-L-6-v2` | Cross-encoder model |
+| `RAG_LOW_MEMORY_MODE` | No | `1` | Releases ONNX sessions between stages |
+| `FRONTEND_ORIGINS` | No | — | Additional comma-separated CORS origins |
 
-## Deploy Free on Render
+## Deployment
 
-1. Click the **Deploy to Render** button above and sign in with GitHub.
-2. Confirm that the service plan is **Free**.
-3. Enter `GROQ_API_KEY` when Render requests the secret value.
-4. Approve the Blueprint and wait for the first Docker build to finish.
+### Backend on Render
 
-No payment method is needed for the free service. The Docker image uses compact,
-quantized ONNX models instead of PyTorch so it fits Render's 512 MB free
-instance. It pre-downloads the embedding and reranking weights during the build,
-then starts Flask with Gunicorn on Render's assigned `PORT`.
+The included `render.yaml` and `Dockerfile` define the backend deployment.
 
-### Free-tier behavior
+1. Create a Render Blueprint from this repository.
+2. Keep the service on the free plan.
+3. Set the secret `GROQ_API_KEY` in Render.
+4. Deploy. Render uses `/api/health` for health checks.
 
-- Render spins the service down after 15 minutes without traffic. The first
-  visitor after that should allow roughly one minute for it to wake up.
-- Free service storage is ephemeral. Uploaded PDFs, their generated index, and
-  chat history work during the active session but are cleared when Render spins
-  down, restarts, or redeploys the container.
-- Render provides 750 free instance hours per workspace each month. Without a
-  payment method, the service is suspended instead of billing when free limits
-  are exhausted.
+The container preloads compact ONNX retrieval models during its image build and
+runs one Gunicorn worker to stay within free-tier memory limits. Runtime PDFs
+and indexes are ephemeral; the browser restores its cached PDFs when needed.
 
-## Deploy the Frontend on Vercel
+### Frontend on Vercel
 
-The repository also contains a static Vercel build. The browser UI is copied
-from `templates/index.html` into `dist/` and calls the RAG API hosted at
-`https://rag-t7t1.onrender.com`.
+Build and deploy the static frontend from the repository root:
 
 ```bash
 npm run build
-vercel --prod
+npx vercel@latest --prod
 ```
 
-Vercel serves only the static frontend. `GROQ_API_KEY` remains private on
-Render and must never be added to Vercel. Browser IndexedDB data is scoped to
-the Vercel domain, so chats and PDFs stored on the Render domain do not
-automatically transfer to the new origin.
+For the existing production project, maintainers can deploy explicitly with:
 
-## Notes
+```bash
+npx vercel@latest --prod --project archive-ai-rag
+```
 
-- The LLM depends on Groq API for answer generation.
-- IndexedDB is used instead of server-side SQLite for temporary user-device
-  storage. This keeps each browser's chats and PDFs on that device; a SQLite
-  file inside the free Render container would be erased whenever it sleeps.
-- Retrieval uses local FAISS, BM25, quantized ONNX embeddings, and ONNX
-  cross-encoder reranking; no retrieval API key or GPU is required.
-- If no FAISS index exists yet, the app still works as a general Groq-powered
-  assistant. Upload PDFs to automatically enable document-grounded answers with
-  source citations.
-- If you regenerate `db/chunks.json` with the current `ingest.py`, answers can
-  include source file and page citations.
+`.vercelignore` ensures that the Groq key, local PDFs, generated indexes, and
+Python backend are never included in a frontend CLI upload.
+
+## API Summary
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Service, index, and Groq status |
+| `GET` | `/api/documents` | List indexed PDFs |
+| `POST` | `/api/upload` | Upload PDFs and rebuild the index |
+| `POST` | `/api/chat` | Answer with optional attachment scope/history |
+| `POST` | `/api/reindex` | Rebuild document memory manually |
+| `DELETE` | `/api/documents/<filename>` | Delete a PDF and rebuild the index |
+
+## Data and Security Notes
+
+- Never commit `.env` or place `GROQ_API_KEY` in Vercel variables or frontend
+  JavaScript.
+- Uploaded PDFs are temporary backend files and browser-local recovery blobs.
+- Chats are not stored in a shared server database.
+- Only PDF filenames are accepted for document deletion; paths are rejected.
+- The API limits upload request size and restricts browser CORS origins.
+
+## License
+
+This portfolio project is provided for demonstration and educational use.

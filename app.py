@@ -6,34 +6,17 @@ Run:
 Then open http://localhost:7860 in your browser.
 """
 
+import json
 import os
 from pathlib import Path
-import json
 from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, jsonify
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
-
-def _load_env_file(path: str = ".env") -> None:
-    """Load simple KEY=VALUE pairs when python-dotenv is not installed."""
-    env_path = Path(path)
-    if not env_path.exists():
-        return
-
-    for line in env_path.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
-_load_env_file()
-
 from ingest import ingest_pdf
-from query import get_response, chat_history, reset_rag_cache
+from query import get_response, reset_rag_cache
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
@@ -141,7 +124,7 @@ def api_chat():
     """Handle a chat message and return the assistant's response.
 
     Expects JSON body: {"message": "user question"}
-    Returns JSON: {"reply": "assistant answer", "history": [...]}
+    Returns JSON: {"reply": "assistant answer"}
     """
     data = request.get_json(silent=True)
     if not data or "message" not in data:
@@ -197,19 +180,6 @@ def api_chat():
         return jsonify({"error": f"Unexpected error: {e}"}), 500
 
     return jsonify({"reply": reply})
-
-
-@app.route("/api/history", methods=["GET"])
-def api_history():
-    """Return no server history; browser IndexedDB owns each user's chat."""
-    return jsonify({"history": []})
-
-
-@app.route("/api/clear", methods=["POST"])
-def api_clear():
-    """Clear compatibility-only in-memory history."""
-    chat_history.clear()
-    return jsonify({"status": "cleared"})
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -346,7 +316,6 @@ def api_health():
         "status": "ok",
         "index_ready": index_exists and chunks_exists,
         "uploaded_documents": pdf_count,
-        "stored_messages": len(chat_history),
         "storage_dir": str(STORAGE_DIR),
         "groq_configured": bool(os.environ.get("GROQ_API_KEY", "").strip()),
         "groq_model": os.environ.get("GROQ_LOW_LATENCY_MODEL", "openai/gpt-oss-20b"),
