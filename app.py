@@ -150,8 +150,28 @@ def api_chat():
     if not user_msg:
         return jsonify({"error": "Empty message"}), 400
 
+    # Attachment metadata is supplied only after /api/upload has safely stored
+    # the files. Keep a small, display-only representation with the chat turn
+    # so documents remain visually associated with the message that used them.
+    raw_attachments = data.get("attachments", [])
+    attachments = []
+    if isinstance(raw_attachments, list):
+        for item in raw_attachments[:10]:
+            if not isinstance(item, dict):
+                continue
+            filename = str(item.get("filename", "")).strip()
+            if not filename:
+                continue
+            try:
+                size = max(0, int(item.get("size", 0)))
+            except (TypeError, ValueError):
+                size = 0
+            attachments.append({"filename": filename, "size": size})
+
     try:
         reply = get_response(user_msg, db_dir=str(DB_DIR))
+        if attachments and chat_history:
+            chat_history[-1]["attachments"] = attachments
         _save_chat_history()
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500

@@ -3,54 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Assistant</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231f2328'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-size='22' font-family='Arial' font-weight='700' fill='white'%3EAI%3C/text%3E%3C/svg%3E">
+  <title>Archive AI</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f172a'/%3E%3Cpath d='M19 18h20v28H19zM24 25h10M24 31h10M24 37h7' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
 
     :root {
-      --page: #f6f5f1;
-      --panel: #ffffff;
-      --panel-soft: #fbfaf7;
-      --text: #1f2328;
-      --text-soft: #5b616b;
-      --text-muted: #858b94;
-      --line: #dedbd2;
-      --line-strong: #cbc6ba;
-      --accent: #0f766e;
-      --accent-dark: #0b5f59;
-      --accent-soft: #e3f4f1;
-      --warn: #b45309;
+      --navy: #0f172a;
+      --navy-soft: #172033;
+      --ink: #172033;
+      --muted: #667085;
+      --muted-light: #98a2b3;
+      --canvas: #f4f6f8;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --line: #e2e7ee;
+      --line-dark: #d0d7e2;
+      --accent: #245bdb;
+      --accent-dark: #1d4fc2;
+      --success: #18794e;
+      --warning: #a15c00;
       --danger: #b42318;
-      --success: #15803d;
-      --shadow: 0 18px 45px rgba(31, 35, 40, 0.08);
-      --radius: 8px;
-      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --radius: 10px;
+      --font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    html, body {
-      height: 100%;
-    }
-
+    html, body { height: 100%; }
     body {
       margin: 0;
-      background: var(--page);
-      color: var(--text);
-      font-family: var(--font);
       overflow: hidden;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
     }
 
-    button, textarea {
-      font: inherit;
-    }
-
-    button {
-      border: 0;
-    }
+    button, textarea { font: inherit; }
+    button { border: 0; }
+    svg { display: block; }
 
     .app-shell {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-columns: 268px minmax(0, 1fr);
       height: 100vh;
       min-height: 0;
     }
@@ -59,198 +53,150 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
-      background: #ebe7dd;
-      border-right: 1px solid var(--line);
+      padding: 22px 16px 16px;
+      background: var(--navy);
+      color: #fff;
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 18px 18px 14px;
-      border-bottom: 1px solid rgba(31, 35, 40, 0.08);
+      gap: 11px;
+      padding: 0 6px 22px;
     }
 
     .brand-mark {
       display: grid;
       place-items: center;
-      width: 38px;
-      height: 38px;
-      border-radius: 8px;
-      background: #1f2328;
-      color: #fff;
-      font-weight: 700;
-      letter-spacing: 0;
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(255,255,255,.17);
+      border-radius: 9px;
+      background: rgba(255,255,255,.08);
     }
 
-    .brand-title {
-      font-weight: 700;
-      line-height: 1.1;
-    }
+    .brand-mark svg { width: 19px; height: 19px; }
+    .brand-name { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+    .brand-caption { margin-top: 2px; color: #9ba8bd; font-size: 11px; }
 
-    .brand-status {
-      margin-top: 3px;
-      color: var(--text-soft);
-      font-size: 12px;
-      line-height: 1.3;
-    }
-
-    .sidebar-actions {
-      display: grid;
-      gap: 8px;
-      padding: 14px;
-    }
-
-    .action-button {
-      display: inline-flex;
+    .new-chat-button {
+      display: flex;
       align-items: center;
-      justify-content: flex-start;
-      gap: 9px;
+      justify-content: center;
+      gap: 8px;
       width: 100%;
-      min-height: 40px;
-      padding: 9px 11px;
-      border: 1px solid var(--line-strong);
-      border-radius: var(--radius);
-      background: var(--panel);
-      color: var(--text);
+      min-height: 42px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--navy);
       cursor: pointer;
-      transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+      font-weight: 650;
     }
 
-    .action-button:hover {
-      background: var(--panel-soft);
-      border-color: #aaa394;
-    }
-
-    .action-button.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
-    }
-
-    .action-button.primary:hover {
-      background: var(--accent-dark);
-      border-color: var(--accent-dark);
-    }
-
-    .action-button:disabled,
-    .icon-button:disabled,
-    .send-button:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
-    }
-
-    .icon {
-      width: 18px;
-      height: 18px;
-      flex: 0 0 18px;
-    }
+    .new-chat-button:hover { background: #f5f7fa; }
 
     .sidebar-section {
       display: flex;
       flex-direction: column;
       min-height: 0;
-      padding: 10px 14px 14px;
-      border-top: 1px solid rgba(31, 35, 40, 0.08);
+      margin-top: 28px;
     }
 
-    .section-heading {
+    .section-label {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      min-height: 28px;
-      color: var(--text-soft);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+      padding: 0 7px 10px;
+      color: #8f9cb1;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .11em;
       text-transform: uppercase;
+    }
+
+    .document-count {
+      display: grid;
+      place-items: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.1);
+      color: #dbe2ec;
+      font-size: 10px;
     }
 
     .documents {
       display: grid;
-      gap: 7px;
+      gap: 5px;
       min-height: 0;
       overflow-y: auto;
-      padding-top: 8px;
     }
 
     .document-row {
       display: grid;
-      grid-template-columns: 28px minmax(0, 1fr);
+      grid-template-columns: 30px minmax(0, 1fr);
       gap: 9px;
       align-items: center;
-      padding: 9px;
-      border: 1px solid rgba(31, 35, 40, 0.08);
-      border-radius: var(--radius);
-      background: rgba(255, 255, 255, 0.52);
+      min-height: 48px;
+      padding: 7px 8px;
+      border-radius: 7px;
+      color: #d6deea;
     }
 
-    .document-icon {
-      display: grid;
-      place-items: center;
-      width: 28px;
-      height: 32px;
-      border-radius: 6px;
-      background: #fff7ed;
-      color: var(--warn);
-    }
+    .document-row:hover { background: rgba(255,255,255,.06); }
+    .document-icon { color: #8fa9ec; }
+    .document-icon svg { width: 18px; height: 18px; }
+    .document-name { overflow: hidden; font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+    .document-size { margin-top: 2px; color: #7f8da3; font-size: 10px; }
+    .empty-documents { padding: 6px 7px; color: #7f8da3; font-size: 12px; line-height: 1.5; }
 
-    .document-name {
-      overflow: hidden;
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 600;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .document-size {
-      color: var(--text-muted);
-      font-size: 12px;
-    }
-
-    .empty-documents {
-      padding: 12px 4px;
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.45;
-    }
-
-    .system-panel {
+    .sidebar-footer {
       margin-top: auto;
-      padding: 14px;
-      border-top: 1px solid rgba(31, 35, 40, 0.08);
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,.09);
     }
 
-    .status-grid {
-      display: grid;
-      gap: 7px;
-    }
-
-    .status-pill {
+    .system-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 8px 9px;
-      border: 1px solid rgba(31, 35, 40, 0.08);
-      border-radius: var(--radius);
-      background: rgba(255, 255, 255, 0.48);
-      color: var(--text-soft);
-      font-size: 12px;
+      min-height: 34px;
+      padding: 0 7px;
+      color: #9ba8bd;
+      font-size: 11px;
     }
 
-    .status-value {
-      color: var(--text);
-      font-weight: 700;
+    .system-value { display: inline-flex; align-items: center; gap: 7px; color: #dbe2ec; font-weight: 650; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #64748b; }
+    .status-dot.ready { background: #32a56d; }
+    .status-dot.warning { background: #d99232; }
+
+    .refresh-button {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      width: 100%;
+      margin-top: 8px;
+      padding: 9px 7px;
+      border-radius: 6px;
+      background: transparent;
+      color: #9ba8bd;
+      cursor: pointer;
+      font-size: 11px;
+      text-align: left;
     }
 
-    .chat-area {
+    .refresh-button:hover { background: rgba(255,255,255,.06); color: #fff; }
+    .refresh-button:disabled { cursor: not-allowed; opacity: .55; }
+
+    .workspace {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-rows: 64px minmax(0, 1fr) auto;
       min-width: 0;
       min-height: 0;
-      background: var(--panel);
+      background: var(--surface);
     }
 
     .topbar {
@@ -258,406 +204,198 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      min-height: 66px;
-      padding: 13px 22px;
+      padding: 0 28px;
       border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255,255,255,.98);
     }
 
-    .conversation-title {
-      min-width: 0;
-    }
+    .topbar-title { min-width: 0; }
+    .topbar-title h1 { margin: 0; font-size: 14px; font-weight: 700; }
+    .topbar-title p { overflow: hidden; margin: 3px 0 0; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 
-    .conversation-title h1 {
-      margin: 0;
-      font-size: 17px;
-      line-height: 1.25;
-    }
-
-    .conversation-title p {
-      margin: 3px 0 0;
-      color: var(--text-soft);
-      font-size: 13px;
-    }
-
-    .topbar-actions {
-      display: flex;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
+    .topbar-actions { display: flex; gap: 7px; }
     .icon-button {
       display: grid;
       place-items: center;
-      width: 38px;
-      height: 38px;
+      width: 36px;
+      height: 36px;
       border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--panel);
-      color: var(--text-soft);
+      border-radius: 8px;
+      background: #fff;
+      color: #475467;
       cursor: pointer;
-      transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
     }
+    .icon-button:hover { border-color: var(--line-dark); background: var(--surface-soft); color: var(--ink); }
+    .icon-button svg { width: 17px; height: 17px; }
+    #mobile-new-btn { display: none; }
 
-    .icon-button:hover {
-      background: var(--panel-soft);
-      border-color: var(--line-strong);
-      color: var(--text);
-    }
-
-    .chat-container {
+    .chat-scroll {
       min-height: 0;
       overflow-y: auto;
-      scroll-behavior: smooth;
-      background:
-        linear-gradient(to bottom, rgba(246, 245, 241, 0.54), rgba(255, 255, 255, 0) 180px),
-        var(--panel);
+      background: #fff;
     }
 
-    .chat-container::-webkit-scrollbar,
-    .documents::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .chat-container::-webkit-scrollbar-thumb,
-    .documents::-webkit-scrollbar-thumb {
-      background: #d2cdc2;
-      border-radius: 999px;
-    }
-
-    .chat-messages {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      width: min(860px, 100%);
+    .chat-thread {
+      width: min(820px, 100%);
+      min-height: 100%;
       margin: 0 auto;
-      padding: 34px 24px 32px;
+      padding: 42px 28px 54px;
     }
 
     .welcome {
       display: grid;
       align-content: center;
-      min-height: 54vh;
+      min-height: calc(100vh - 250px);
+      padding-bottom: 30px;
     }
 
-    .welcome-inner {
-      max-width: 680px;
-    }
+    .welcome-eyebrow { color: var(--accent); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .welcome h2 { max-width: 650px; margin: 12px 0 12px; color: var(--navy); font-size: clamp(31px, 4vw, 46px); font-weight: 680; letter-spacing: -.035em; line-height: 1.08; }
+    .welcome p { max-width: 590px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
 
-    .welcome h2 {
-      margin: 0 0 12px;
-      font-size: clamp(30px, 5vw, 52px);
-      font-weight: 750;
-      line-height: 1.04;
-      letter-spacing: 0;
-    }
-
-    .welcome p {
-      margin: 0;
-      max-width: 580px;
-      color: var(--text-soft);
-      font-size: 16px;
-      line-height: 1.55;
-    }
-
-    .suggestions {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 24px;
-    }
-
-    .suggestion-chip {
-      min-height: 52px;
+    .suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 28px; }
+    .suggestion {
+      min-height: 56px;
       padding: 12px 14px;
       border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--panel-soft);
-      color: var(--text);
+      border-radius: 8px;
+      background: #fff;
+      color: #344054;
       cursor: pointer;
-      line-height: 1.35;
+      font-size: 12px;
+      line-height: 1.4;
       text-align: left;
-      transition: background 160ms ease, border-color 160ms ease;
     }
+    .suggestion:hover { border-color: #b8c2d0; background: var(--surface-soft); }
 
-    .suggestion-chip:hover {
-      background: #f1eee7;
-      border-color: var(--line-strong);
-    }
-
-    .message {
-      display: grid;
-      grid-template-columns: 34px minmax(0, 1fr);
-      gap: 12px;
-      animation: slideUp 220ms ease;
-    }
-
-    .message.user {
-      grid-template-columns: minmax(0, 1fr) 34px;
-    }
-
+    .message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 13px; padding: 20px 0; border-bottom: 1px solid #eef1f5; }
+    .message:last-child { border-bottom: 0; }
     .message-avatar {
       display: grid;
       place-items: center;
-      width: 34px;
-      height: 34px;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--line);
       border-radius: 8px;
-      background: #ede9df;
-      color: var(--text);
-      font-size: 13px;
+      background: var(--surface-soft);
+      color: #475467;
+      font-size: 10px;
       font-weight: 800;
     }
+    .message.assistant .message-avatar { border-color: var(--navy); background: var(--navy); color: #fff; }
+    .message-content { min-width: 0; padding-top: 1px; }
+    .message-heading { display: flex; align-items: center; gap: 8px; min-height: 24px; margin-bottom: 5px; color: #344054; font-size: 12px; font-weight: 700; }
+    .message-text { color: #263244; font-size: 14px; line-height: 1.72; overflow-wrap: anywhere; }
+    .message.user .message-text { white-space: pre-wrap; }
+    .message-text p { margin: 0 0 10px; }
+    .message-text p:last-child { margin-bottom: 0; }
+    .message-text code { padding: 2px 5px; border-radius: 4px; background: #eef2f6; color: #22304a; font-family: Consolas, monospace; font-size: 12px; }
+    .message-text pre { margin: 12px 0; padding: 14px; overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; background: #f7f9fb; }
+    .message-text pre code { padding: 0; background: transparent; }
+    .message-text ul, .message-text ol { margin: 8px 0; padding-left: 21px; }
+    .message-text hr { margin: 16px 0; border: 0; border-top: 1px solid var(--line); }
 
-    .message.assistant .message-avatar {
-      background: var(--accent-soft);
-      color: var(--accent-dark);
-    }
-
-    .message.user .message-avatar {
-      grid-column: 2;
-      background: #1f2328;
-      color: #fff;
-    }
-
-    .message.user .message-content {
-      grid-column: 1;
-      grid-row: 1;
-      justify-self: end;
-      max-width: min(680px, 100%);
-    }
-
-    .message-content {
-      min-width: 0;
-    }
-
-    .message-role {
-      margin-bottom: 5px;
-      color: var(--text-muted);
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    .message.user .message-role {
-      text-align: right;
-    }
-
-    .message-text {
-      color: var(--text);
-      font-size: 15px;
-      line-height: 1.65;
-      overflow-wrap: anywhere;
-      white-space: pre-wrap;
-    }
-
-    .message.user .message-text {
-      padding: 11px 13px;
-      border-radius: var(--radius);
-      background: #f1eee7;
-      line-height: 1.5;
-    }
-
-    .message-text code {
-      padding: 2px 5px;
-      border-radius: 5px;
-      background: #f0f1f2;
-      color: #24292f;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-      font-size: 13px;
-    }
-
-    .message-text pre {
-      margin: 12px 0;
-      padding: 14px;
-      overflow-x: auto;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #f6f8fa;
-    }
-
-    .message-text pre code {
-      padding: 0;
-      background: transparent;
-    }
-
-    .message-text ul,
-    .message-text ol {
-      margin: 8px 0;
-      padding-left: 22px;
-    }
-
-    .message-actions {
-      display: flex;
-      gap: 6px;
-      margin-top: 8px;
-      opacity: 0;
-      transition: opacity 160ms ease;
-    }
-
-    .message:hover .message-actions {
-      opacity: 1;
-    }
-
-    .message.user .message-actions {
-      justify-content: flex-end;
-    }
-
-    .msg-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 8px;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .msg-btn:hover {
-      background: var(--panel-soft);
-      color: var(--text);
-    }
-
-    .typing-indicator {
-      display: inline-flex;
-      gap: 5px;
-      padding-top: 6px;
-    }
-
-    .typing-indicator span {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: var(--text-muted);
-      animation: bounce 1.2s infinite ease-in-out;
-    }
-
-    .typing-indicator span:nth-child(2) { animation-delay: 0.14s; }
-    .typing-indicator span:nth-child(3) { animation-delay: 0.28s; }
-
-    .composer-wrap {
-      padding: 14px 22px 20px;
-      border-top: 1px solid var(--line);
-      background: linear-gradient(to top, #ffffff 80%, rgba(255, 255, 255, 0.78));
-    }
-
-    .composer {
-      display: flex;
-      align-items: flex-end;
-      gap: 10px;
-      width: min(860px, 100%);
-      margin: 0 auto;
-      padding: 10px;
-      border: 1px solid var(--line-strong);
-      border-radius: var(--radius);
-      background: var(--panel);
-      box-shadow: var(--shadow);
-    }
-
-    #message-input {
-      flex: 1;
-      min-height: 38px;
-      max-height: 150px;
-      padding: 8px 4px;
-      resize: none;
-      border: 0;
-      outline: 0;
-      background: transparent;
-      color: var(--text);
-      font-size: 15px;
-      line-height: 1.45;
-    }
-
-    #message-input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .send-button {
+    .message-attachments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+    .message-file {
       display: grid;
-      place-items: center;
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius);
-      background: var(--accent);
-      color: white;
-      cursor: pointer;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 9px;
+      align-items: center;
+      min-height: 56px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+    .message-file-icon { display: grid; place-items: center; width: 32px; height: 36px; border-radius: 6px; background: #e9eefc; color: var(--accent); }
+    .message-file-icon svg { width: 17px; height: 17px; }
+    .message-file-name { overflow: hidden; color: #344054; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .message-file-meta { margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .file-state { color: var(--success); font-size: 10px; font-weight: 700; }
+    .file-state.uploading { color: var(--warning); }
+    .file-state.failed { color: var(--danger); }
+
+    .message-actions { margin-top: 9px; }
+    .copy-button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; background: transparent; color: var(--muted-light); cursor: pointer; font-size: 10px; }
+    .copy-button:hover { color: #475467; }
+
+    .processing { color: var(--muted); font-size: 13px; line-height: 24px; }
+
+    .composer-area { padding: 12px 28px 20px; border-top: 1px solid var(--line); background: #fff; }
+    .composer-shell { width: min(820px, 100%); margin: 0 auto; border: 1px solid var(--line-dark); border-radius: var(--radius); background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.07); }
+
+    .staged-files { display: none; gap: 7px; padding: 10px 10px 0; overflow-x: auto; }
+    .staged-files.visible { display: flex; }
+    .staged-file {
+      display: grid;
+      grid-template-columns: 29px minmax(90px, 155px) 22px;
+      gap: 7px;
+      align-items: center;
       flex: 0 0 auto;
-      transition: background 160ms ease;
+      min-height: 45px;
+      padding: 6px 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
     }
+    .staged-file-icon { display: grid; place-items: center; width: 28px; height: 31px; border-radius: 5px; background: #e9eefc; color: var(--accent); }
+    .staged-file-name { overflow: hidden; color: #344054; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .staged-file-size { margin-top: 2px; color: var(--muted); font-size: 9px; }
+    .remove-file { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+    .remove-file:hover { background: #e7ebf0; color: var(--ink); }
 
-    .send-button:hover {
-      background: var(--accent-dark);
-    }
-
-    .file-input-hidden {
-      display: none;
-    }
+    .composer-row { display: flex; align-items: flex-end; gap: 8px; padding: 9px; }
+    .attach-button, .send-button { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 7px; cursor: pointer; }
+    .attach-button { background: transparent; color: #667085; }
+    .attach-button:hover { background: var(--surface-soft); color: var(--ink); }
+    .attach-button svg, .send-button svg { width: 18px; height: 18px; }
+    #message-input { flex: 1; min-height: 38px; max-height: 145px; padding: 8px 3px; resize: none; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 14px; line-height: 1.5; }
+    #message-input::placeholder { color: var(--muted-light); }
+    .send-button { background: var(--navy); color: #fff; }
+    .send-button:hover { background: #25324a; }
+    .send-button:disabled, .attach-button:disabled { cursor: not-allowed; opacity: .38; }
+    .composer-note { width: min(820px, 100%); margin: 7px auto 0; color: var(--muted-light); font-size: 9px; text-align: center; }
+    .file-input { display: none; }
 
     .toast {
       position: fixed;
       right: 22px;
       bottom: 22px;
-      z-index: 20;
-      max-width: min(460px, calc(100vw - 44px));
-      padding: 11px 13px;
-      border: 1px solid rgba(31, 35, 40, 0.12);
-      border-radius: var(--radius);
-      background: #1f2328;
-      color: white;
-      box-shadow: var(--shadow);
-      font-size: 14px;
-      line-height: 1.4;
+      z-index: 30;
+      max-width: min(420px, calc(100vw - 44px));
+      padding: 11px 14px;
+      border-radius: 8px;
+      background: var(--navy);
+      color: #fff;
+      box-shadow: 0 14px 38px rgba(15,23,42,.18);
+      font-size: 12px;
+      line-height: 1.45;
       opacity: 0;
       pointer-events: none;
-      transform: translateY(10px);
-      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #7a271a; }
+
+    @media (max-width: 860px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      #mobile-new-btn { display: grid; }
+      .topbar { padding: 0 16px; }
+      .chat-thread { padding: 30px 18px 42px; }
+      .composer-area { padding: 10px 14px 14px; }
     }
 
-    .toast.show {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
-      40% { transform: translateY(-4px); opacity: 1; }
-    }
-
-    @media (max-width: 900px) {
-      .app-shell {
-        grid-template-columns: 1fr;
-      }
-
-      .sidebar {
-        display: none;
-      }
-    }
-
-    @media (max-width: 640px) {
-      .topbar {
-        padding: 11px 12px;
-      }
-
-      .conversation-title p {
-        display: none;
-      }
-
-      .chat-messages {
-        padding: 24px 14px 26px;
-      }
-
-      .suggestions {
-        grid-template-columns: 1fr;
-      }
-
-      .composer-wrap {
-        padding: 10px 10px 14px;
-      }
+    @media (max-width: 600px) {
+      .workspace { grid-template-rows: 58px minmax(0, 1fr) auto; }
+      .topbar-title p { max-width: 220px; }
+      .chat-thread { padding: 24px 14px 34px; }
+      .welcome { min-height: calc(100vh - 230px); }
+      .welcome h2 { font-size: 32px; }
+      .suggestions, .message-attachments { grid-template-columns: 1fr; }
+      .message { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+      .message-avatar { width: 29px; height: 29px; }
+      .composer-area { padding: 8px 8px 12px; }
+      .composer-note { display: none; }
     }
   </style>
 </head>
@@ -665,91 +403,76 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">AI</div>
-        <div>
-          <div class="brand-title">RAG Assistant</div>
-          <div class="brand-status" id="document-status">Checking documents...</div>
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3.5h9l3 3V21H6z"/><path d="M14.5 3.5V7H18M9 11h6M9 15h6"/></svg>
         </div>
+        <div><div class="brand-name">Archive AI</div><div class="brand-caption">Document intelligence</div></div>
       </div>
 
-      <div class="sidebar-actions">
-        <button class="action-button primary" id="upload-btn" title="Upload PDF documents">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-          Upload PDFs
+      <button class="new-chat-button" id="clear-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        New conversation
+      </button>
+
+      <section class="sidebar-section">
+        <div class="section-label"><span>Knowledge base</span><span class="document-count" id="document-count">0</span></div>
+        <div class="documents" id="document-list"><div class="empty-documents">Attach a PDF in the composer to begin building your knowledge base.</div></div>
+      </section>
+
+      <div class="sidebar-footer">
+        <div class="system-row"><span>Document index</span><span class="system-value"><span class="status-dot" id="index-dot"></span><span id="index-status">Checking</span></span></div>
+        <div class="system-row"><span>AI service</span><span class="system-value"><span class="status-dot" id="groq-dot"></span><span id="groq-status">Checking</span></span></div>
+        <button class="refresh-button" id="reindex-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+          Refresh document index
         </button>
-        <button class="action-button" id="reindex-btn" title="Refresh document memory">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18 2v4h-4"/><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M6 22v-4h4"/></svg>
-          Refresh memory
-        </button>
-      </div>
-
-      <div class="sidebar-section">
-        <div class="section-heading">
-          <span>Documents</span>
-          <span id="document-count">0</span>
-        </div>
-        <div class="documents" id="document-list">
-          <div class="empty-documents">No PDFs uploaded.</div>
-        </div>
-      </div>
-
-      <div class="system-panel">
-        <div class="section-heading">System</div>
-        <div class="status-grid">
-          <div class="status-pill"><span>Docs</span><span class="status-value" id="index-status">Checking</span></div>
-          <div class="status-pill"><span>Groq</span><span class="status-value" id="groq-status">Checking</span></div>
-        </div>
       </div>
     </aside>
 
-    <main class="chat-area">
+    <main class="workspace">
       <header class="topbar">
-        <div class="conversation-title">
-          <h1>AI Assistant</h1>
-          <p id="top-status">Chat normally, or upload PDFs for document-grounded answers.</p>
-        </div>
+        <div class="topbar-title"><h1>Document workspace</h1><p id="top-status">Preparing your workspace…</p></div>
         <div class="topbar-actions">
-          <button class="icon-button" id="mobile-upload-btn" title="Upload PDF documents">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+          <button class="icon-button" id="mobile-new-btn" title="New conversation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
-          <button class="icon-button" id="mobile-reindex-btn" title="Refresh document memory">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18 2v4h-4"/><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M6 22v-4h4"/></svg>
-          </button>
-          <button class="icon-button" id="clear-btn" title="New chat">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          </button>
-          <button class="icon-button" id="health-btn" title="Check system status">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <button class="icon-button" id="health-btn" title="System status">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
           </button>
         </div>
       </header>
 
-      <input class="file-input-hidden" id="document-upload" type="file" accept="application/pdf,.pdf" multiple>
-
-      <section class="chat-container" id="chat-container">
-        <div class="chat-messages" id="chat-messages">
+      <section class="chat-scroll" id="chat-scroll">
+        <div class="chat-thread" id="chat-thread">
           <div class="welcome" id="welcome">
-            <div class="welcome-inner">
-              <h2>How can I help?</h2>
-              <p>Ask anything now. Upload PDFs when you want answers grounded in your documents.</p>
-              <div class="suggestions">
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">Explain RAG in simple terms</button>
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">Help me plan a document review</button>
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">Draft a concise email</button>
-                <button class="suggestion-chip" onclick="sendSuggestion(this)">What can you help me with?</button>
-              </div>
+            <div class="welcome-eyebrow">Private document workspace</div>
+            <h2>Ask better questions of your documents.</h2>
+            <p>Attach one or more PDFs to a message. Archive AI will index them, keep them connected to that conversation turn, and answer from their contents.</p>
+            <div class="suggestions">
+              <button class="suggestion" data-prompt="Summarize the key points in the attached document.">Summarize an attached document</button>
+              <button class="suggestion" data-prompt="Identify the important dates, obligations, and risks.">Extract dates, obligations, and risks</button>
+              <button class="suggestion" data-prompt="Compare the main ideas across my uploaded documents.">Compare uploaded documents</button>
+              <button class="suggestion" data-prompt="Create a concise executive briefing from these materials.">Prepare an executive briefing</button>
             </div>
           </div>
         </div>
       </section>
 
-      <footer class="composer-wrap">
-        <div class="composer">
-          <textarea id="message-input" rows="1" placeholder="Message AI Assistant..."></textarea>
-          <button class="send-button" id="send-btn" title="Send message" disabled>
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg>
-          </button>
+      <footer class="composer-area">
+        <input class="file-input" id="document-upload" type="file" accept="application/pdf,.pdf" multiple>
+        <div class="composer-shell">
+          <div class="staged-files" id="staged-files"></div>
+          <div class="composer-row">
+            <button class="attach-button" id="attach-btn" title="Attach PDF">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m20.5 11.5-8.8 8.8a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+            </button>
+            <textarea id="message-input" rows="1" placeholder="Ask a question or attach PDFs…"></textarea>
+            <button class="send-button" id="send-btn" title="Send message" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4zM22 2 11 13"/></svg>
+            </button>
+          </div>
         </div>
+        <div class="composer-note">PDF files only · Documents are indexed before your question is answered</div>
       </footer>
     </main>
   </div>
@@ -757,59 +480,30 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const chatContainer = document.getElementById('chat-container');
-    const chatMessages = document.getElementById('chat-messages');
+    const chatScroll = document.getElementById('chat-scroll');
+    const chatThread = document.getElementById('chat-thread');
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
-    const uploadBtn = document.getElementById('upload-btn');
-    const mobileUploadBtn = document.getElementById('mobile-upload-btn');
-    const reindexBtn = document.getElementById('reindex-btn');
-    const mobileReindexBtn = document.getElementById('mobile-reindex-btn');
+    const attachBtn = document.getElementById('attach-btn');
     const documentUpload = document.getElementById('document-upload');
+    const stagedFilesElement = document.getElementById('staged-files');
     const clearBtn = document.getElementById('clear-btn');
+    const mobileNewBtn = document.getElementById('mobile-new-btn');
     const healthBtn = document.getElementById('health-btn');
+    const reindexBtn = document.getElementById('reindex-btn');
     const toast = document.getElementById('toast');
-    const documentStatus = document.getElementById('document-status');
     const documentCount = document.getElementById('document-count');
     const documentList = document.getElementById('document-list');
     const indexStatus = document.getElementById('index-status');
+    const indexDot = document.getElementById('index-dot');
     const groqStatus = document.getElementById('groq-status');
+    const groqDot = document.getElementById('groq-dot');
     const topStatus = document.getElementById('top-status');
 
-    let isLoading = false;
-    let messageHistory = [];
+    let stagedFiles = [];
+    let isBusy = false;
 
-    messageInput.addEventListener('input', () => {
-      messageInput.style.height = 'auto';
-      messageInput.style.height = Math.min(messageInput.scrollHeight, 150) + 'px';
-      sendBtn.disabled = !messageInput.value.trim();
-    });
-
-    messageInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        if (!sendBtn.disabled && !isLoading) sendMessage();
-      }
-    });
-
-    sendBtn.addEventListener('click', () => {
-      if (!isLoading) sendMessage();
-    });
-
-    clearBtn.addEventListener('click', clearChat);
-    healthBtn.addEventListener('click', checkHealth);
-    uploadBtn.addEventListener('click', () => documentUpload.click());
-    mobileUploadBtn.addEventListener('click', () => documentUpload.click());
-    reindexBtn.addEventListener('click', rebuildIndex);
-    mobileReindexBtn.addEventListener('click', rebuildIndex);
-    documentUpload.addEventListener('change', uploadDocuments);
-
-    function setBusy(isBusy) {
-      uploadBtn.disabled = isBusy;
-      mobileUploadBtn.disabled = isBusy;
-      reindexBtn.disabled = isBusy;
-      mobileReindexBtn.disabled = isBusy;
-    }
+    const fileIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4M9 12h6M9 16h4"/></svg>`;
 
     function formatBytes(bytes) {
       if (!bytes) return '0 B';
@@ -819,136 +513,171 @@
       return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
     }
 
-    function sendSuggestion(button) {
-      messageInput.value = button.textContent;
-      messageInput.dispatchEvent(new Event('input'));
-      sendMessage();
-    }
-
-    function showToast(message, type = 'error') {
-      toast.textContent = message;
-      toast.style.background = type === 'success' ? '#14532d' : '#1f2328';
-      if (type === 'error') toast.style.background = '#7f1d1d';
-      toast.classList.add('show');
-      clearTimeout(showToast.timer);
-      showToast.timer = setTimeout(() => toast.classList.remove('show'), 5200);
-    }
-
-    const showError = showToast;
-
-    function renderMarkdown(text) {
-      if (!text) return '';
-      let html = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-      html = html
-        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-        .replace(/\n/g, '<br>');
-
-      return html;
-    }
-
-    function escapeHtml(text) {
+    function escapeHtml(value) {
       const div = document.createElement('div');
-      div.textContent = text;
+      div.textContent = value == null ? '' : String(value);
       return div.innerHTML;
     }
 
-    function createMessageElement(role, text) {
-      const div = document.createElement('div');
-      div.className = `message ${role}`;
-
-      const avatarLabel = role === 'user' ? 'Y' : 'AI';
-      const roleName = role === 'user' ? 'You' : 'Assistant';
-      const body = role === 'user' ? escapeHtml(text) : renderMarkdown(text);
-
-      div.innerHTML = `
-        <div class="message-avatar">${avatarLabel}</div>
-        <div class="message-content">
-          <div class="message-role">${roleName}</div>
-          <div class="message-text">${body}</div>
-          <div class="message-actions">
-            <button class="msg-btn" onclick="copyMessage(this)" title="Copy message">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy
-            </button>
-          </div>
-        </div>
-      `;
-      return div;
+    function renderMarkdown(text) {
+      let html = escapeHtml(text || '');
+      html = html
+        .replace(/```(?:\w+)?\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^---$/gm, '<hr>')
+        .replace(/^[\-*] (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+      return `<p>${html}</p>`;
     }
 
-    function copyMessage(button) {
-      const text = button.closest('.message-content').querySelector('.message-text').textContent;
-      navigator.clipboard.writeText(text);
-      button.textContent = 'Copied';
-      setTimeout(() => {
-        button.innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy';
-      }, 1400);
+    function showToast(message, type = 'info') {
+      toast.textContent = message;
+      toast.className = `toast show${type === 'error' ? ' error' : ''}`;
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => { toast.className = 'toast'; }, 4500);
     }
 
-    function showTyping() {
-      const div = document.createElement('div');
-      div.className = 'message assistant';
-      div.id = 'typing-msg';
-      div.innerHTML = `
-        <div class="message-avatar">AI</div>
+    function updateSendState() {
+      sendBtn.disabled = isBusy || (!messageInput.value.trim() && stagedFiles.length === 0);
+      attachBtn.disabled = isBusy;
+    }
+
+    function renderStagedFiles() {
+      stagedFilesElement.classList.toggle('visible', stagedFiles.length > 0);
+      stagedFilesElement.innerHTML = stagedFiles.map((file, index) => `
+        <div class="staged-file">
+          <div class="staged-file-icon">${fileIcon}</div>
+          <div><div class="staged-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div><div class="staged-file-size">${formatBytes(file.size)} · PDF</div></div>
+          <button class="remove-file" data-index="${index}" title="Remove attachment">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
+        </div>`).join('');
+      stagedFilesElement.querySelectorAll('.remove-file').forEach((button) => {
+        button.addEventListener('click', () => {
+          stagedFiles.splice(Number(button.dataset.index), 1);
+          renderStagedFiles();
+          updateSendState();
+        });
+      });
+    }
+
+    function attachmentCards(attachments, state = 'ready') {
+      if (!attachments || !attachments.length) return '';
+      const stateLabel = state === 'uploading' ? 'Indexing' : state === 'failed' ? 'Failed' : 'Ready';
+      return `<div class="message-attachments">${attachments.map((file) => `
+        <div class="message-file">
+          <div class="message-file-icon">${fileIcon}</div>
+          <div><div class="message-file-name" title="${escapeHtml(file.filename || file.name)}">${escapeHtml(file.filename || file.name)}</div><div class="message-file-meta">PDF · ${formatBytes(file.size)}</div></div>
+          <span class="file-state ${state}">${stateLabel}</span>
+        </div>`).join('')}</div>`;
+    }
+
+    function createMessage(role, text, attachments = [], attachmentState = 'ready') {
+      const element = document.createElement('article');
+      element.className = `message ${role}`;
+      const isUser = role === 'user';
+      element.innerHTML = `
+        <div class="message-avatar">${isUser ? 'YOU' : 'AI'}</div>
         <div class="message-content">
-          <div class="message-role">Assistant</div>
-          <div class="typing-indicator"><span></span><span></span><span></span></div>
-        </div>
-      `;
-      chatMessages.appendChild(div);
+          <div class="message-heading">${isUser ? 'You' : 'Archive AI'}</div>
+          <div class="message-text">${isUser ? escapeHtml(text) : renderMarkdown(text)}</div>
+          ${attachmentCards(attachments, attachmentState)}
+          <div class="message-actions"><button class="copy-button">Copy response</button></div>
+        </div>`;
+      element.querySelector('.copy-button').addEventListener('click', async (event) => {
+        await navigator.clipboard.writeText(text);
+        event.currentTarget.textContent = 'Copied';
+        setTimeout(() => { event.currentTarget.textContent = 'Copy response'; }, 1200);
+      });
+      return element;
+    }
+
+    function showProcessing(label) {
+      const element = document.createElement('article');
+      element.className = 'message assistant';
+      element.id = 'processing-message';
+      element.innerHTML = `<div class="message-avatar">AI</div><div class="message-content"><div class="message-heading">Archive AI</div><div class="processing">${escapeHtml(label)}</div></div>`;
+      chatThread.appendChild(element);
       scrollToBottom();
     }
 
-    function hideTyping() {
-      const element = document.getElementById('typing-msg');
-      if (element) element.remove();
+    function updateProcessing(label) {
+      const processing = document.querySelector('#processing-message .processing');
+      if (processing) processing.textContent = label;
+    }
+
+    function hideProcessing() {
+      document.getElementById('processing-message')?.remove();
     }
 
     function scrollToBottom() {
-      chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+      chatScroll.scrollTo({ top: chatScroll.scrollHeight, behavior: 'auto' });
     }
 
-    async function uploadDocuments() {
-      const files = Array.from(documentUpload.files || []);
-      if (!files.length) return;
-
+    async function uploadAttachments(files) {
       const formData = new FormData();
       files.forEach((file) => formData.append('documents', file));
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Document upload failed.');
+      return data;
+    }
 
-      setBusy(true);
-      showToast('Storing and reading PDF documents...', 'success');
+    async function sendMessage() {
+      if (isBusy) return;
+      const files = [...stagedFiles];
+      const typedText = messageInput.value.trim();
+      if (!typedText && files.length === 0) return;
+
+      const prompt = typedText || 'Please review the attached document and summarize its key information.';
+      document.getElementById('welcome')?.remove();
+      const userMessage = createMessage('user', prompt, files, files.length ? 'uploading' : 'ready');
+      chatThread.appendChild(userMessage);
+
+      stagedFiles = [];
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+      renderStagedFiles();
+      isBusy = true;
+      updateSendState();
+      showProcessing(files.length ? 'Securely uploading and indexing your documents…' : 'Reviewing your question…');
 
       try {
-        const response = await fetch('/api/upload', { method: 'POST', body: formData });
-        const data = await response.json();
-
-        if (!response.ok) {
-          showToast(data.error || 'Upload failed.');
-          return;
+        let uploaded = [];
+        if (files.length) {
+          const uploadResult = await uploadAttachments(files);
+          uploaded = uploadResult.uploaded || [];
+          const cards = userMessage.querySelector('.message-attachments');
+          if (cards) cards.outerHTML = attachmentCards(uploaded, 'ready');
+          updateProcessing('Searching your document workspace…');
+          await refreshSystemState();
         }
 
-        const uploadedCount = data.uploaded ? data.uploaded.length : files.length;
-        const rejectedCount = data.rejected ? data.rejected.length : 0;
-        const suffix = rejectedCount ? ` ${rejectedCount} file(s) were skipped.` : '';
-        const indexedText = data.chunks ? ` I stored ${data.chunks} searchable chunk(s).` : '';
-        showToast(`${uploadedCount} PDF file(s) stored and ready.${indexedText}${suffix}`, 'success');
-        await refreshSystemState();
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: prompt, attachments: uploaded }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'The assistant could not complete the request.');
+
+        hideProcessing();
+        chatThread.appendChild(createMessage('assistant', data.reply));
+        scrollToBottom();
       } catch (error) {
-        showToast('Upload failed. Is the server running?');
+        hideProcessing();
+        userMessage.querySelectorAll('.file-state').forEach((state) => { state.className = 'file-state failed'; state.textContent = 'Failed'; });
+        chatThread.appendChild(createMessage('assistant', `I could not complete this request. ${error.message}`));
+        showToast(error.message, 'error');
+        scrollToBottom();
       } finally {
-        setBusy(false);
-        documentUpload.value = '';
+        isBusy = false;
+        updateSendState();
+        messageInput.focus();
       }
     }
 
@@ -956,187 +685,126 @@
       const response = await fetch('/api/documents');
       const data = await response.json();
       const documents = data.documents || [];
-
       documentCount.textContent = documents.length;
-      documentStatus.textContent = documents.length === 1 ? '1 PDF uploaded' : `${documents.length} PDFs uploaded`;
-
-      if (!documents.length) {
-        documentList.innerHTML = '<div class="empty-documents">No PDFs uploaded.</div>';
-        return documents;
-      }
-
-      documentList.innerHTML = documents.map((document) => `
+      documentList.innerHTML = documents.length ? documents.map((document) => `
         <div class="document-row" title="${escapeHtml(document.filename)}">
-          <div class="document-icon">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-          </div>
-          <div>
-            <div class="document-name">${escapeHtml(document.filename)}</div>
-            <div class="document-size">${formatBytes(document.size)}</div>
-          </div>
-        </div>
-      `).join('');
-
+          <div class="document-icon">${fileIcon}</div>
+          <div><div class="document-name">${escapeHtml(document.filename)}</div><div class="document-size">${formatBytes(document.size)}</div></div>
+        </div>`).join('') : '<div class="empty-documents">Attach a PDF in the composer to begin building your knowledge base.</div>';
       return documents;
     }
 
     async function refreshHealth() {
       const response = await fetch('/api/health');
       const data = await response.json();
-
-      indexStatus.textContent = data.index_ready ? 'Ready' : 'Chat only';
-      indexStatus.style.color = data.index_ready ? 'var(--success)' : 'var(--warn)';
-      groqStatus.textContent = data.groq_configured ? 'Ready' : 'Missing';
-      groqStatus.style.color = data.groq_configured ? 'var(--success)' : 'var(--warn)';
+      indexStatus.textContent = data.index_ready ? 'Ready' : 'Not indexed';
+      indexDot.className = `status-dot ${data.index_ready ? 'ready' : 'warning'}`;
+      groqStatus.textContent = data.groq_configured ? 'Connected' : 'Not configured';
+      groqDot.className = `status-dot ${data.groq_configured ? 'ready' : 'warning'}`;
       topStatus.textContent = data.index_ready
-        ? `${data.uploaded_documents} PDF(s) stored and searchable.`
-        : data.uploaded_documents
-          ? `${data.uploaded_documents} PDF(s) stored. Refresh memory if document answers seem out of date.`
-          : 'General chat ready. Upload PDFs for document-grounded answers.';
-
+        ? `${data.uploaded_documents} document${data.uploaded_documents === 1 ? '' : 's'} available for grounded answers`
+        : 'Attach PDFs to begin a document-grounded conversation';
       return data;
     }
 
     async function refreshSystemState() {
-      try {
-        await Promise.all([refreshDocuments(), refreshHealth()]);
-      } catch (error) {
-        documentStatus.textContent = 'Status unavailable';
-        topStatus.textContent = 'Unable to reach the server.';
-      }
+      try { await Promise.all([refreshDocuments(), refreshHealth()]); }
+      catch (_) { topStatus.textContent = 'Workspace status is temporarily unavailable'; }
     }
 
     async function rebuildIndex() {
-      setBusy(true);
-      showToast('Refreshing document memory. This can take a minute...', 'success');
-
+      if (isBusy) return;
+      isBusy = true;
+      reindexBtn.disabled = true;
+      showToast('Refreshing the document index…');
       try {
         const response = await fetch('/api/reindex', { method: 'POST' });
         const data = await response.json();
-
-        if (!response.ok) {
-          showToast(data.error || 'Document refresh failed.');
-          return;
-        }
-
-        showToast(`Document memory refreshed from ${data.documents} PDF(s) with ${data.chunks} chunk(s).`, 'success');
+        if (!response.ok) throw new Error(data.error || 'Index refresh failed.');
+        showToast(`Index refreshed with ${data.chunks} searchable sections.`);
         await refreshSystemState();
-      } catch (error) {
-        showToast('Document refresh failed. Is the server running?');
-      } finally {
-        setBusy(false);
-      }
-    }
-
-    async function sendMessage() {
-      const text = messageInput.value.trim();
-      if (!text || isLoading) return;
-
-      const welcome = document.getElementById('welcome');
-      if (welcome) welcome.remove();
-
-      chatMessages.appendChild(createMessageElement('user', text));
-      messageHistory.push({ role: 'user', content: text });
-
-      messageInput.value = '';
-      messageInput.style.height = 'auto';
-      sendBtn.disabled = true;
-      isLoading = true;
-      showTyping();
-      scrollToBottom();
-
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text }),
-        });
-        const data = await response.json();
-
-        hideTyping();
-
-        if (!response.ok) {
-          showError(data.error || 'Something went wrong');
-          return;
-        }
-
-        chatMessages.appendChild(createMessageElement('assistant', data.reply));
-        messageHistory.push({ role: 'assistant', content: data.reply });
-        scrollToBottom();
-      } catch (error) {
-        hideTyping();
-        showError('Failed to connect to the server.');
-      } finally {
-        isLoading = false;
-        sendBtn.disabled = !messageInput.value.trim();
-        messageInput.focus();
-      }
+      } catch (error) { showToast(error.message, 'error'); }
+      finally { isBusy = false; reindexBtn.disabled = false; updateSendState(); }
     }
 
     async function clearChat() {
-      try {
-        await fetch('/api/clear', { method: 'POST' });
-      } catch (error) {
-        /* keep local clear available */
-      }
-
-      messageHistory = [];
-      chatMessages.innerHTML = `
+      try { await fetch('/api/clear', { method: 'POST' }); } catch (_) {}
+      chatThread.innerHTML = `
         <div class="welcome" id="welcome">
-          <div class="welcome-inner">
-            <h2>How can I help?</h2>
-            <p>Ask anything now. Upload PDFs and refresh memory when you want answers grounded in your documents.</p>
-            <div class="suggestions">
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">Explain RAG in simple terms</button>
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">Help me plan a document review</button>
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">Draft a concise email</button>
-              <button class="suggestion-chip" onclick="sendSuggestion(this)">What can you help me with?</button>
-            </div>
+          <div class="welcome-eyebrow">Private document workspace</div>
+          <h2>Ask better questions of your documents.</h2>
+          <p>Attach one or more PDFs to a message. Archive AI will index them, keep them connected to that conversation turn, and answer from their contents.</p>
+          <div class="suggestions">
+            <button class="suggestion" data-prompt="Summarize the key points in the attached document.">Summarize an attached document</button>
+            <button class="suggestion" data-prompt="Identify the important dates, obligations, and risks.">Extract dates, obligations, and risks</button>
+            <button class="suggestion" data-prompt="Compare the main ideas across my uploaded documents.">Compare uploaded documents</button>
+            <button class="suggestion" data-prompt="Create a concise executive briefing from these materials.">Prepare an executive briefing</button>
           </div>
-        </div>
-      `;
+        </div>`;
+      bindSuggestions();
       messageInput.focus();
     }
 
-    async function loadChatHistory() {
+    async function loadHistory() {
       try {
         const response = await fetch('/api/history');
         const data = await response.json();
         const history = data.history || [];
         if (!history.length) return;
-
-        const welcome = document.getElementById('welcome');
-        if (welcome) welcome.remove();
-
+        document.getElementById('welcome')?.remove();
         history.forEach((turn) => {
           if (!turn.user || !turn.assistant) return;
-          chatMessages.appendChild(createMessageElement('user', turn.user));
-          chatMessages.appendChild(createMessageElement('assistant', turn.assistant));
-          messageHistory.push({ role: 'user', content: turn.user });
-          messageHistory.push({ role: 'assistant', content: turn.assistant });
+          chatThread.appendChild(createMessage('user', turn.user, turn.attachments || []));
+          chatThread.appendChild(createMessage('assistant', turn.assistant));
         });
         scrollToBottom();
-      } catch (error) {
-        /* stored history is optional */
-      }
+      } catch (_) {}
     }
 
-    async function checkHealth() {
+    function bindSuggestions() {
+      document.querySelectorAll('.suggestion').forEach((button) => {
+        button.addEventListener('click', () => {
+          messageInput.value = button.dataset.prompt;
+          messageInput.dispatchEvent(new Event('input'));
+          messageInput.focus();
+        });
+      });
+    }
+
+    attachBtn.addEventListener('click', () => documentUpload.click());
+    documentUpload.addEventListener('change', () => {
+      const incoming = Array.from(documentUpload.files || []);
+      incoming.forEach((file) => {
+        if (!file.name.toLowerCase().endsWith('.pdf')) return;
+        const exists = stagedFiles.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified);
+        if (!exists) stagedFiles.push(file);
+      });
+      documentUpload.value = '';
+      renderStagedFiles();
+      updateSendState();
+    });
+
+    messageInput.addEventListener('input', () => {
+      messageInput.style.height = 'auto';
+      messageInput.style.height = `${Math.min(messageInput.scrollHeight, 145)}px`;
+      updateSendState();
+    });
+    messageInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }
+    });
+    sendBtn.addEventListener('click', sendMessage);
+    clearBtn.addEventListener('click', clearChat);
+    mobileNewBtn.addEventListener('click', clearChat);
+    reindexBtn.addEventListener('click', rebuildIndex);
+    healthBtn.addEventListener('click', async () => {
       try {
         const data = await refreshHealth();
-        if (data.index_ready && data.groq_configured) {
-          showToast(`System healthy. ${data.uploaded_documents} PDF(s) stored and Groq is configured.`, 'success');
-        } else if (!data.index_ready) {
-          showToast('General chat is ready. Upload PDFs to enable document answers.');
-        } else {
-          showToast('GROQ_API_KEY is missing. Add it to your environment or .env file.');
-        }
-      } catch (error) {
-        showToast('Cannot reach the server.');
-      }
-    }
+        showToast(data.index_ready && data.groq_configured ? 'All systems are ready.' : 'Some workspace services need attention.', data.groq_configured ? 'info' : 'error');
+      } catch (_) { showToast('Unable to reach the workspace service.', 'error'); }
+    });
 
-    loadChatHistory();
+    bindSuggestions();
+    loadHistory();
     refreshSystemState();
     messageInput.focus();
   </script>

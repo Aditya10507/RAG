@@ -16,12 +16,12 @@ search, and generates answers through the Groq API.
 ## Features
 
 - Document understanding from PDFs with recursive semantic chunking.
-- PDF upload from the web UI into app storage.
+- Message-bound PDF attachments from the chat composer into app storage.
 - Automatic document indexing after PDF upload.
 - Hybrid retrieval with dense FAISS search plus sparse BM25 search.
 - Reciprocal Rank Fusion (RRF) to combine dense and keyword rankings.
 - Cross-encoder re-ranking before context is sent to the LLM.
-- Stored chat history for a simple LLM-style chat experience.
+- Stored chat history, including the PDFs associated with each chat turn.
 - Source tracking when the index contains file/page metadata.
 - Groq API generation with configurable model via `GROQ_MODEL`.
 - General chat fallback before any PDFs are uploaded or indexed.
@@ -114,7 +114,8 @@ You can chat immediately, even before uploading PDFs.
 
 You can add PDFs in either of these ways:
 
-- Start the app and use the upload button in the header.
+- Start the app and attach PDFs from the message composer. Selected files are
+  shown on the outgoing message, indexed, and then used to answer that message.
 - Manually create a `data/` directory and place PDF files inside it.
 
 Uploaded files are saved to app storage and indexed automatically. Once upload
