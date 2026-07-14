@@ -8,3 +8,6 @@ db/
 *.log
 *.pdf
 sample.pdf
+dist/
+.vercel/
+node_modules/

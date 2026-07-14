@@ -10,3 +10,6 @@ __pycache__
 data
 db
 tests
+dist
+.vercel
+node_modules
