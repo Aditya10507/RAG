@@ -10,7 +10,9 @@ search, and generates answers through the Groq API.
 
 - Document understanding from PDFs with recursive semantic chunking.
 - Message-bound PDF attachments from the chat composer into app storage.
+- Attachment-scoped retrieval so a question uses the PDFs attached to that message.
 - Automatic document indexing after PDF upload.
+- Safe document removal with automatic reindexing of the remaining workspace.
 - Hybrid retrieval with dense FAISS search plus sparse BM25 search.
 - Reciprocal Rank Fusion (RRF) to combine dense and keyword rankings.
 - Cross-encoder re-ranking before context is sent to the LLM.
