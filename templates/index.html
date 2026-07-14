@@ -136,7 +136,7 @@
 
     .document-row {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: 30px minmax(0, 1fr) 28px;
       gap: 9px;
       align-items: center;
       min-height: 48px;
@@ -150,6 +150,20 @@
     .document-icon svg { width: 18px; height: 18px; }
     .document-name { overflow: hidden; font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
     .document-size { margin-top: 2px; color: #7f8da3; font-size: 10px; }
+    .document-delete {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #7f8da3;
+      cursor: pointer;
+    }
+    .document-delete:hover, .document-delete:focus-visible { background: rgba(255,255,255,.08); color: #f1f5f9; outline: none; }
+    .document-delete svg { width: 15px; height: 15px; }
+    .document-delete:disabled { cursor: wait; opacity: .45; }
     .empty-documents { padding: 6px 7px; color: #7f8da3; font-size: 12px; line-height: 1.5; }
 
     .sidebar-footer {
@@ -504,6 +518,7 @@
     let isBusy = false;
 
     const fileIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4M9 12h6M9 16h4"/></svg>`;
+    const trashIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M9 7V4.5h6V7m-8.5 0 .75 12h9.5l.75-12M10 10.5v5M14 10.5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
     function formatBytes(bytes) {
       if (!bytes) return '0 B';
@@ -707,11 +722,29 @@
       const data = await readApiResponse(response, 'Could not load the document list.');
       const documents = data.documents || [];
       documentCount.textContent = documents.length;
-      documentList.innerHTML = documents.length ? documents.map((document) => `
+      documentList.innerHTML = documents.length ? documents.map((document, index) => `
         <div class="document-row" title="${escapeHtml(document.filename)}">
           <div class="document-icon">${fileIcon}</div>
           <div><div class="document-name">${escapeHtml(document.filename)}</div><div class="document-size">${formatBytes(document.size)}</div></div>
+          <button class="document-delete" type="button" data-document-index="${index}" title="Remove document" aria-label="Remove document">${trashIcon}</button>
         </div>`).join('') : '<div class="empty-documents">Attach a PDF in the composer to begin building your knowledge base.</div>';
+
+      documentList.querySelectorAll('.document-delete').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const document = documents[Number(button.dataset.documentIndex)];
+          if (!document || !window.confirm(`Remove ${document.filename} from this workspace?`)) return;
+          button.disabled = true;
+          try {
+            const response = await fetch(`/api/documents/${encodeURIComponent(document.filename)}`, { method: 'DELETE' });
+            await readApiResponse(response, 'Could not remove the document.');
+            showToast(`${document.filename} removed.`);
+            await refreshSystemState();
+          } catch (error) {
+            button.disabled = false;
+            showToast(error.message, 'error');
+          }
+        });
+      });
       return documents;
     }
 

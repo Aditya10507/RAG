@@ -169,7 +169,11 @@ def api_chat():
             attachments.append({"filename": filename, "size": size})
 
     try:
-        reply = get_response(user_msg, db_dir=str(DB_DIR))
+        reply = get_response(
+            user_msg,
+            db_dir=str(DB_DIR),
+            source_filenames=[item["filename"] for item in attachments] or None,
+        )
         if attachments and chat_history:
             chat_history[-1]["attachments"] = attachments
         _save_chat_history()
@@ -260,6 +264,43 @@ def api_documents():
         for path in sorted(DATA_DIR.glob("*.pdf"))
     ]
     return jsonify({"documents": documents})
+
+
+@app.route("/api/documents/<path:filename>", methods=["DELETE"])
+def api_delete_document(filename: str):
+    """Delete one stored PDF and rebuild the remaining document index."""
+    if Path(filename).name != filename or not _is_allowed_pdf(filename):
+        return jsonify({"error": "Invalid document filename."}), 400
+
+    document_path = DATA_DIR / filename
+    if not document_path.is_file():
+        return jsonify({"error": "Document not found."}), 404
+
+    document_path.unlink()
+    remaining_documents = list(DATA_DIR.glob("*.pdf"))
+
+    try:
+        if remaining_documents:
+            stats = _rebuild_document_index()
+        else:
+            for index_file in ("index.faiss", "chunks.json", "manifest.json"):
+                path = DB_DIR / index_file
+                if path.exists():
+                    path.unlink()
+            reset_rag_cache()
+            stats = {"documents": 0, "chunks": 0}
+    except Exception as e:
+        return jsonify({
+            "error": f"Document removed, but reindexing failed: {e}",
+            "filename": filename,
+        }), 500
+
+    return jsonify({
+        "status": "deleted",
+        "filename": filename,
+        "documents": stats["documents"],
+        "chunks": stats["chunks"],
+    })
 
 
 @app.route("/api/reindex", methods=["POST"])

@@ -142,11 +142,15 @@ def _ensure_loaded(db_dir: str = "db"):
         tokenized_corpus = [_tokenize(c["text"]) for c in _GLOBAL["chunks"]]
         _GLOBAL["bm25"] = BM25Okapi(tokenized_corpus)
 
-def _search_hybrid(query: str) -> list[int]:
+def _search_hybrid(query: str, allowed_indices: list[int] | None = None) -> list[int]:
     """Hybrid search combining dense (FAISS) and sparse (BM25) retrieval with RRF.
 
+    When ``allowed_indices`` is provided, retrieval is restricted to those
+    chunks so a message attachment is answered from that document only.
     Returns a list of chunk indices sorted by combined relevance.
     """
+    allowed = set(allowed_indices) if allowed_indices is not None else None
+
     # --- Dense search via FAISS ---
     try:
         q_vec = np.asarray(
@@ -154,7 +158,9 @@ def _search_hybrid(query: str) -> list[int]:
             dtype="float32",
         )
         faiss.normalize_L2(q_vec)
-        dense_k = min(_DENSE_TOP_K, _GLOBAL["index"].ntotal)
+        dense_k = _GLOBAL["index"].ntotal if allowed is not None else min(
+            _DENSE_TOP_K, _GLOBAL["index"].ntotal
+        )
         _dense_scores, dense_indices = _GLOBAL["index"].search(q_vec, dense_k)
     finally:
         # Render's free instance has 512 MB RAM. Release the embedding session
@@ -165,17 +171,24 @@ def _search_hybrid(query: str) -> list[int]:
     # --- Sparse search via BM25 ---
     tokenized_query = _tokenize(query)
     bm25_scores = _GLOBAL["bm25"].get_scores(tokenized_query)
-    sparse_top_indices = np.argsort(bm25_scores)[::-1][:_SPARSE_TOP_K]
+    sparse_ranked = np.argsort(bm25_scores)[::-1].tolist()
+
+    dense_ranked = [
+        idx for idx in dense_indices[0].tolist()
+        if idx >= 0 and (allowed is None or idx in allowed)
+    ][:_DENSE_TOP_K]
+    sparse_top_indices = [
+        idx for idx in sparse_ranked
+        if allowed is None or idx in allowed
+    ][:_SPARSE_TOP_K]
 
     # --- RRF: combine rankings ---
     rrf_scores: dict[int, float] = {}
 
-    for rank, idx in enumerate(dense_indices[0].tolist()):
-        if idx < 0:
-            continue
+    for rank, idx in enumerate(dense_ranked):
         rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (_RRF_K + rank + 1)
 
-    for rank, idx in enumerate(sparse_top_indices.tolist()):
+    for rank, idx in enumerate(sparse_top_indices):
         rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (_RRF_K + rank + 1)
 
     # Sort by combined RRF score descending
@@ -314,7 +327,12 @@ def _generate_with_groq(prompt: str) -> str:
     return _clean_model_answer(completion.choices[0].message.content)
 
 
-def get_response(user_query: str, db_dir: str = "db", k: int = 5) -> str:
+def get_response(
+    user_query: str,
+    db_dir: str = "db",
+    k: int = 5,
+    source_filenames: list[str] | None = None,
+) -> str:
     """Answer a question using the full RAG pipeline: hybrid search → re-rank → generate.
 
     Pipeline:
@@ -337,8 +355,21 @@ def get_response(user_query: str, db_dir: str = "db", k: int = 5) -> str:
 
     chunks = _GLOBAL["chunks"]
 
+    allowed_indices = None
+    if source_filenames:
+        allowed_sources = {Path(name).name for name in source_filenames if name}
+        allowed_indices = [
+            index for index, chunk in enumerate(chunks)
+            if chunk.get("metadata", {}).get("source") in allowed_sources
+        ]
+        if not allowed_indices:
+            raise RuntimeError(
+                "The attached document is not available in the search index. "
+                "Please attach it again."
+            )
+
     # Step 1: Hybrid search (FAISS + BM25 with RRF)
-    hybrid_indices = _search_hybrid(user_query)
+    hybrid_indices = _search_hybrid(user_query, allowed_indices=allowed_indices)
 
     # Step 2: Cross-encoder re-ranking
     reranked_indices = _rerank(user_query, hybrid_indices)
